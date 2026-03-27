@@ -1,6 +1,6 @@
-"""Tests for score CLI command (--heuristic / --refine flags)."""
+"""Tests for score CLI command (--heuristic / --refine flags) and list --profile."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -187,3 +187,36 @@ class TestScoreRefineFlag:
         result = runner.invoke(app, ["score", "--refine", "5", "--profile", "10"])
         assert result.exit_code == 0
         assert "没有已评分岗位" in result.output
+
+
+class TestListProfileFlag:
+    """Tests for list --profile flag (bug fix: profile_id passthrough)."""
+
+    @patch("jobpilot.cli._get_db")
+    def test_list_min_score_passes_profile_id(self, mock_get_db):
+        """list --min-score --profile should pass profile_id to list_scores_with_jobs."""
+        db = MagicMock()
+        mock_get_db.return_value = db
+
+        job = _make_job()
+        score_obj = _make_score()
+        db.list_scores_with_jobs.return_value = [(score_obj, job)]
+
+        result = runner.invoke(app, ["list", "--min-score", "7", "--profile", "10"])
+        assert result.exit_code == 0
+        db.list_scores_with_jobs.assert_called_once_with(
+            profile_id=10, min_score=7.0, limit=20
+        )
+
+    @patch("jobpilot.cli._get_db")
+    def test_list_min_score_default_profile(self, mock_get_db):
+        """list --min-score without --profile should default to profile_id=10."""
+        db = MagicMock()
+        mock_get_db.return_value = db
+        db.list_scores_with_jobs.return_value = []
+
+        result = runner.invoke(app, ["list", "--min-score", "5"])
+        assert result.exit_code == 0
+        db.list_scores_with_jobs.assert_called_once_with(
+            profile_id=10, min_score=5.0, limit=20
+        )

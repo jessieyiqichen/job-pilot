@@ -21,6 +21,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 ## 待完成
 
 - [x] 跑评分并汇报结果 ✅
+- [x] Bug fix: `list --min-score` profile_id 不一致 ✅
 
 ## Review 备注
 
@@ -68,6 +69,16 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - 14/20 精评岗位得分 8.5，远高于启发式的 7.0-7.9 — API 评分更精准也更乐观
 - 深圳岗位占比高（8/16），上海 4 个，北京 4 个
 - 大部分是 AI 产品方向实习/全职，与偏好一致
+
+### Bug fix: list --min-score profile_id（2026-03-27）
+
+**问题**：`list --min-score 7` 调用 `list_scores_with_jobs()` 时用默认 `profile_id=1`，但所有评分在 `profile_id=10`，导致结果为空。
+
+**修复**：
+- `src/jobpilot/cli.py` — `list` 命令新增 `--profile` 参数（默认 10，与 score/tailor/apply/pipeline 一致），传给 `list_scores_with_jobs(profile_id=...)`
+- `tests/test_cli_score.py` — +2 测试（profile_id 传递 + 默认值验证）
+
+**验证**：`list --min-score 7` 现在正确显示 16 个高分岗位。236 tests all pass。
 
 ## 架构约定（CLI 必须遵守）
 - frozen dataclass

@@ -279,6 +279,7 @@ def _do_score(
 def list_jobs(
     status: str = typer.Option("", "--status", "-s", help="Filter by status"),
     min_score: float = typer.Option(0.0, "--min-score", "-m", help="Minimum score"),
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID for score filtering"),
     limit: int = typer.Option(20, "--limit", "-l"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
@@ -287,7 +288,7 @@ def list_jobs(
     db = _get_db()
 
     if min_score > 0:
-        results = db.list_scores_with_jobs(min_score=min_score, limit=limit)
+        results = db.list_scores_with_jobs(profile_id=profile_id, min_score=min_score, limit=limit)
         table = Table(title=f"Jobs (score >= {min_score})")
         table.add_column("Score", justify="center")
         table.add_column("Title", style="bold")
