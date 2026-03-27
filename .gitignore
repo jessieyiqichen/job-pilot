@@ -19,7 +19,10 @@ data/xhs_favorites_raw.json
 data/*.md
 .DS_Store
 
-# Scripts (debug)
+# Scripts (user-specific filters and debug)
+scripts/compile_list.py
+scripts/filter_jobs.py
+scripts/fetch_xhs_favorites.js
 scripts/debug_*.js
 
 # Claude (personal CLAUDE.md has local paths; example is committed)
