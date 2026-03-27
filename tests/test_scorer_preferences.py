@@ -1,4 +1,4 @@
-"""Tests for preference scoring (Feature 1)."""
+"""Tests for preference scoring (Feature 1) and role_fit scoring."""
 
 from unittest.mock import patch
 
@@ -6,6 +6,7 @@ from jobpilot.ai.scorer import (
     _heuristic_score,
     _load_preferences,
     _score_preference,
+    _score_role_fit,
 )
 from jobpilot.models import Job, JobScore, Profile
 
@@ -217,3 +218,154 @@ class TestHeuristicScoreWithPreferences:
         scores = [_heuristic_score(profile, j).overall_score for j in jobs]
         spread = max(scores) - min(scores)
         assert spread >= 1.5, f"Score spread {spread:.2f} < 1.5: {scores}"
+
+
+# ------------------------------------------------------------------
+# role_fit scoring
+# ------------------------------------------------------------------
+
+SAMPLE_ROLE_FIT = {
+    "strong_match": ["AI产品经理", "产品经理", "数据分析"],
+    "good_match": ["数据工程", "商业分析", "运营分析"],
+    "weak_match": ["后端开发", "前端开发", "测试工程师"],
+}
+
+
+class TestScoreRoleFit:
+    """Tests for _score_role_fit function."""
+
+    def test_strong_match_in_title(self):
+        score = _score_role_fit("AI产品经理", "负责AI产品需求", SAMPLE_ROLE_FIT)
+        assert score == 1.0
+
+    def test_strong_match_in_jd(self):
+        score = _score_role_fit("高级岗位", "需要数据分析能力", SAMPLE_ROLE_FIT)
+        assert score == 1.0
+
+    def test_good_match_in_title(self):
+        score = _score_role_fit("商业分析师", "负责业务分析", SAMPLE_ROLE_FIT)
+        assert score == 0.7
+
+    def test_good_match_in_jd(self):
+        score = _score_role_fit("分析岗位", "数据工程相关工作", SAMPLE_ROLE_FIT)
+        assert score == 0.7
+
+    def test_weak_match_in_title(self):
+        score = _score_role_fit("后端开发工程师", "Java Spring Boot", SAMPLE_ROLE_FIT)
+        assert score == 0.3
+
+    def test_weak_match_in_jd(self):
+        score = _score_role_fit("工程师", "前端开发，React", SAMPLE_ROLE_FIT)
+        assert score == 0.3
+
+    def test_no_match(self):
+        score = _score_role_fit("UI设计师", "负责视觉设计", SAMPLE_ROLE_FIT)
+        assert score == 0.5
+
+    def test_empty_role_fit(self):
+        score = _score_role_fit("任意岗位", "任意描述", {})
+        assert score == 1.0
+
+    def test_priority_strong_over_good(self):
+        """If both strong and good match, strong wins."""
+        score = _score_role_fit("数据分析商业分析", "综合岗位", SAMPLE_ROLE_FIT)
+        assert score == 1.0
+
+    def test_priority_good_over_weak(self):
+        """If both good and weak match, good wins."""
+        score = _score_role_fit("商业分析后端开发", "综合岗位", SAMPLE_ROLE_FIT)
+        assert score == 0.7
+
+    def test_case_insensitive(self):
+        role_fit = {
+            "strong_match": ["Data Analyst"],
+            "good_match": [],
+            "weak_match": [],
+        }
+        score = _score_role_fit("Senior Data Analyst", "data work", role_fit)
+        assert score == 1.0
+
+
+class TestRoleFitInPreference:
+    """Tests for role_fit integration in _score_preference."""
+
+    def test_strong_match_no_cap(self):
+        prefs = {
+            "preferred_industries": ["AI"],
+            "preferred_cities": ["上海"],
+            "career_track": ["AI产品经理"],
+            "deal_breakers": [],
+            "min_salary": 0,
+            "role_fit": SAMPLE_ROLE_FIT,
+        }
+        job = _make_job(title="AI产品经理", city="上海", jd_text="AI公司，产品经理岗位")
+        score, positives, negatives = _score_preference(job, prefs)
+        assert score > 5.0
+        # No cap warning for strong match
+        assert not any("岗位适配度低" in n for n in negatives)
+
+    def test_weak_match_cap_at_5(self):
+        prefs = {
+            "preferred_industries": ["AI"],
+            "preferred_cities": ["上海"],
+            "career_track": ["AI产品经理"],
+            "deal_breakers": [],
+            "min_salary": 0,
+            "role_fit": SAMPLE_ROLE_FIT,
+        }
+        job = _make_job(title="后端开发", city="上海", jd_text="AI公司后端开发")
+        score, positives, negatives = _score_preference(job, prefs)
+        assert score <= 5.0
+        assert any("岗位适配度低" in n for n in negatives)
+
+    def test_no_role_fit_backward_compatible(self):
+        """Without role_fit, scoring works as before."""
+        prefs = {
+            "preferred_industries": ["AI"],
+            "preferred_cities": ["上海"],
+            "career_track": ["AI产品经理"],
+            "deal_breakers": [],
+            "min_salary": 0,
+        }
+        job = _make_job(title="后端开发", city="上海", jd_text="AI公司后端开发")
+        score, _, _ = _score_preference(job, prefs)
+        # Without role_fit, no cap — score can be > 5.0
+        assert 1.0 <= score <= 10.0
+
+
+class TestRoleFitInHeuristic:
+    """Tests for role_fit integration in _heuristic_score."""
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_weak_match_caps_overall(self, mock_prefs, mock_config):
+        """weak_match job should have overall_score capped at 5.0."""
+        mock_config.ANTHROPIC_API_KEY = ""
+        prefs_with_role_fit = {**SAMPLE_PREFS, "role_fit": SAMPLE_ROLE_FIT}
+        mock_prefs.return_value = prefs_with_role_fit
+        profile = _make_profile()
+        job = _make_job(
+            title="后端开发",
+            jd_text="技能要求：Java, Spring Boot\n弹性工作",
+            city="上海",
+        )
+        result = _heuristic_score(profile, job)
+        assert result.overall_score <= 5.0
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_strong_match_no_cap(self, mock_prefs, mock_config):
+        """strong_match job should NOT be capped."""
+        mock_config.ANTHROPIC_API_KEY = ""
+        prefs_with_role_fit = {**SAMPLE_PREFS, "role_fit": SAMPLE_ROLE_FIT}
+        mock_prefs.return_value = prefs_with_role_fit
+        profile = _make_profile()
+        job = _make_job(
+            title="数据分析师",
+            jd_text="技能要求：Python, SQL, 数据分析\n弹性工作",
+            city="上海",
+            company="互联网大厂",
+        )
+        result = _heuristic_score(profile, job)
+        # Should not be capped — a well-matched job can score > 5
+        assert result.overall_score > 5.0

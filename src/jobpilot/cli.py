@@ -1,22 +1,8 @@
-"""
-JobPilot CLI — typer-based command-line interface.
-
-Commands:
-  jobpilot resume <path>          Parse and store a resume
-  jobpilot search <query>         Search jobs and store results
-  jobpilot score                  AI-score all unscored jobs
-  jobpilot list                   List jobs with scores
-  jobpilot status <job_id> <st>   Update application status
-  jobpilot tailor <job_id>        Tailor resume for a specific job
-  jobpilot pdf <md_path>          Convert Markdown resume to PDF
-  jobpilot report                 Generate daily report
-  jobpilot stats                  Show database stats
-"""
+"""JobPilot CLI — typer-based command-line interface."""
 
 from __future__ import annotations
 
 import logging
-import sys
 from pathlib import Path
 
 import typer
@@ -47,9 +33,46 @@ def _setup_logging(verbose: bool) -> None:
     )
 
 
-# ------------------------------------------------------------------
-# resume — parse and store
-# ------------------------------------------------------------------
+@app.command()
+def setup(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Interactive preference questionnaire — configure job matching preferences."""
+    _setup_logging(verbose)
+    from rich.panel import Panel
+
+    from jobpilot.setup import load_existing_preferences, run_questionnaire, save_preferences
+
+    existing = load_existing_preferences()
+    if existing:
+        console.print("[yellow]已有偏好配置。重新运行将更新（不会丢失其他字段）。[/yellow]")
+        if not typer.confirm("继续？", default=True):
+            raise typer.Exit(0)
+
+    console.print(Panel(
+        "[bold]回答以下问题帮助我们了解你的求职偏好[/bold]\n完成后将自动更新评分配置",
+        title="JobPilot 求职偏好设置",
+        border_style="cyan",
+    ))
+
+    preferences = run_questionnaire()
+    cfg_path = save_preferences(preferences)
+
+    # Print summary table
+    console.print()
+    table = Table(title="偏好设置摘要")
+    table.add_column("配置项", style="bold")
+    table.add_column("值")
+
+    for key, value in preferences.items():
+        display_val = ", ".join(value) if isinstance(value, list) else str(value)
+        table.add_row(key, display_val)
+
+    console.print(table)
+    console.print(f"\n[green]偏好已保存到: {cfg_path}[/green]")
+    console.print("[dim]提示: 运行 jobpilot score 重新评分已有岗位[/dim]")
+
+
 @app.command()
 def resume(
     path: str = typer.Argument(..., help="Path to resume file (PDF/DOCX/MD)"),
@@ -93,9 +116,6 @@ def resume(
             )
 
 
-# ------------------------------------------------------------------
-# search — find jobs
-# ------------------------------------------------------------------
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search keywords (e.g. 'Python开发')"),
@@ -172,9 +192,6 @@ def search(
         _do_score(db, verbose)
 
 
-# ------------------------------------------------------------------
-# score — AI match scoring
-# ------------------------------------------------------------------
 @app.command()
 def score(
     profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID to match against"),
@@ -239,9 +256,6 @@ def _do_score(
     console.print(table)
 
 
-# ------------------------------------------------------------------
-# list — show jobs with scores
-# ------------------------------------------------------------------
 @app.command(name="list")
 def list_jobs(
     status: str = typer.Option("", "--status", "-s", help="Filter by status"),
@@ -289,9 +303,6 @@ def list_jobs(
         console.print(table)
 
 
-# ------------------------------------------------------------------
-# detail — show job detail + score
-# ------------------------------------------------------------------
 @app.command()
 def detail(
     job_id: str = typer.Argument(..., help="Job ID to show details for"),
@@ -336,9 +347,6 @@ def detail(
             console.print(f"\n  [blue]Suggestion:[/blue] {score_obj.suggestion}")
 
 
-# ------------------------------------------------------------------
-# status — update application status
-# ------------------------------------------------------------------
 @app.command()
 def status(
     job_id: str = typer.Argument(..., help="Job ID"),
@@ -361,9 +369,6 @@ def status(
         raise typer.Exit(1)
 
 
-# ------------------------------------------------------------------
-# tailor — customize resume for a job
-# ------------------------------------------------------------------
 @app.command()
 def tailor(
     job_id: str = typer.Argument(None, help="Job ID to tailor resume for"),
@@ -472,9 +477,6 @@ def _batch_tailor(
     console.print("[dim]下一步: jobpilot apply 选择岗位投递[/dim]")
 
 
-# ------------------------------------------------------------------
-# apply — select jobs to apply
-# ------------------------------------------------------------------
 @app.command()
 def apply(
     profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
@@ -563,9 +565,6 @@ def apply(
     console.print(f"\n[green]已标记 {applied_count} 个岗位为「已投递」[/green]")
 
 
-# ------------------------------------------------------------------
-# pipeline — show application funnel
-# ------------------------------------------------------------------
 @app.command()
 def pipeline(
     profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
@@ -615,9 +614,6 @@ def pipeline(
     console.print()
 
 
-# ------------------------------------------------------------------
-# import-xhs — import jobs from XHS favorites JSON
-# ------------------------------------------------------------------
 @app.command(name="import-xhs")
 def import_xhs(
     json_file: str = typer.Argument(..., help="Path to JSON file with XHS job data"),
@@ -682,9 +678,6 @@ def import_xhs(
         _do_score(db, verbose)
 
 
-# ------------------------------------------------------------------
-# pdf — convert Markdown resume to PDF
-# ------------------------------------------------------------------
 @app.command()
 def pdf(
     md_path: str = typer.Argument(..., help="Path to Markdown resume"),
@@ -711,9 +704,6 @@ def pdf(
         raise typer.Exit(1)
 
 
-# ------------------------------------------------------------------
-# report — daily summary
-# ------------------------------------------------------------------
 @app.command()
 def report(
     output: str = typer.Option("", "--output", "-o", help="Output file path"),
@@ -733,9 +723,6 @@ def report(
         console.print(md)
 
 
-# ------------------------------------------------------------------
-# stats — database statistics
-# ------------------------------------------------------------------
 @app.command()
 def stats(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
@@ -760,9 +747,6 @@ def stats(
     console.print(table)
 
 
-# ------------------------------------------------------------------
-# version
-# ------------------------------------------------------------------
 @app.command()
 def version() -> None:
     """Show version."""

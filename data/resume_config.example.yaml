@@ -1,6 +1,7 @@
 # JobPilot Resume Configuration
 # Copy this file to resume_config.yaml and fill in your details.
 # AI tailoring uses this as the source of truth — it will NOT add skills you don't have.
+# Run `jobpilot setup` to fill preferences interactively.
 
 name: "Your Name"
 email: "your@email.com"
@@ -28,9 +29,25 @@ skills:
       - "Statistical analysis"
 
 preferences:
+  # Basic preferences
+  career_stage: "应届毕业生"         # 在校生 / 应届毕业生 / 在职跳槽 / 自由职业
+  job_type: "全职"                   # 实习 / 全职 / 兼职
+  career_track: ["Data Analyst", "Business Analyst"]
+  previous_track: ""                 # If career-switching, your previous field
   preferred_industries: ["Tech", "Finance"]
   preferred_company_size: ["Large", "Medium"]
   preferred_cities: ["Shanghai", "Beijing"]
-  career_track: ["Data Analyst", "Business Analyst"]
-  deal_breakers: ["996"]
+  remote_preference: "都可以"         # 纯远程 / 海外可以 / 只接受国内线下 / 都可以
   min_salary: 8000
+  priorities: ["成长空间", "薪资", "WLB"]
+  deal_breakers: ["996"]
+  core_strengths: "Python, SQL, Data Analysis"
+  learning_goals: "Machine Learning"
+
+  # Role fit — controls how well different job types match your goals
+  # strong_match: score × 1.0, good_match: score × 0.7, weak_match: score × 0.3 + cap at 5.0
+  # Omit this section to disable role fit scoring
+  role_fit:
+    strong_match: ["Data Analyst", "Business Analyst"]
+    good_match: ["Data Engineer", "Product Analyst"]
+    weak_match: ["Backend Developer", "Frontend Developer"]

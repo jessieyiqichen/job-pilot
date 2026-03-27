@@ -77,11 +77,21 @@ def score_job(profile: Profile, job: Job) -> JobScore:
     preferences = _load_preferences()
     if preferences:
         pref_lines = []
+        # Standard preference fields
         for k, v in preferences.items():
+            if k in ("core_strengths", "learning_goals"):
+                continue  # handled separately below
             if isinstance(v, list):
                 pref_lines.append(f"- {k}: {', '.join(str(x) for x in v)}")
             else:
                 pref_lines.append(f"- {k}: {v}")
+        # Append core_strengths and learning_goals as candidate context
+        core = preferences.get("core_strengths", "")
+        goals = preferences.get("learning_goals", "")
+        if core:
+            pref_lines.append(f"- 候选人核心优势: {core}")
+        if goals:
+            pref_lines.append(f"- 候选人学习方向: {goals}")
         preferences_text = "\n".join(pref_lines)
     else:
         preferences_text = "（无特殊偏好）"
@@ -551,6 +561,38 @@ def _score_title_relevance(profile: Profile, job: Job) -> tuple[float, str]:
         return (4.0, f"岗位'{job.title}'与简历经历关联度较低")
 
 
+def _score_role_fit(title: str, jd_text: str, role_fit: dict) -> float:
+    """Score how well a job matches the user's target role.
+
+    Args:
+        title: Job title
+        jd_text: Job description text
+        role_fit: Dict with strong_match/good_match/weak_match keyword lists
+
+    Returns:
+        1.0 for strong_match, 0.7 for good_match, 0.3 for weak_match,
+        0.5 for no match, 1.0 if role_fit is empty/unconfigured.
+    """
+    if not role_fit:
+        return 1.0
+
+    combined = f"{title} {jd_text}".lower()
+
+    for kw in role_fit.get("strong_match", []):
+        if kw.lower() in combined:
+            return 1.0
+
+    for kw in role_fit.get("good_match", []):
+        if kw.lower() in combined:
+            return 0.7
+
+    for kw in role_fit.get("weak_match", []):
+        if kw.lower() in combined:
+            return 0.3
+
+    return 0.5
+
+
 def _load_preferences() -> dict:
     """Load preferences from resume_config.yaml if present."""
     cfg_path = Path(config.DATA_DIR) / "resume_config.yaml"
@@ -566,12 +608,14 @@ def _score_preference(job: Job, preferences: dict) -> tuple[float, list[str], li
 
     Returns (score_0_to_10, positives, negatives).
 
-    Dimensions:
-    - Industry match (25%): JD/company contains preferred_industries
-    - City match (20%): precise district > same city > different city
-    - Career track (25%): title alignment with career_track
-    - Deal-breaker (20%): JD contains deal_breakers keywords
+    Dimensions (when all present):
+    - Industry match (20%): JD/company contains preferred_industries
+    - City match (15%): precise district > same city > different city
+    - Career track (20%): title alignment with career_track
+    - Deal-breaker (15%): JD contains deal_breakers keywords
     - Salary floor (10%): salary_min >= min_salary
+    - Job type (10%): 实习/全职 match
+    - Remote preference (10%): 远程/remote match
     """
     positives: list[str] = []
     negatives: list[str] = []
@@ -582,7 +626,7 @@ def _score_preference(job: Job, preferences: dict) -> tuple[float, list[str], li
     city_lower = (job.city or "").lower()
     combined_text = f"{jd_lower} {company_lower} {title_lower}"
 
-    # 1. Industry match (25%)
+    # 1. Industry match
     preferred_industries = preferences.get("preferred_industries", [])
     if preferred_industries:
         matched_ind = [ind for ind in preferred_industries if ind.lower() in combined_text]
@@ -594,7 +638,7 @@ def _score_preference(job: Job, preferences: dict) -> tuple[float, list[str], li
     else:
         industry_score = 6.0
 
-    # 2. City match (20%)
+    # 2. City match
     preferred_cities = preferences.get("preferred_cities", [])
     if preferred_cities:
         exact_match = any(c.lower() == city_lower for c in preferred_cities)
@@ -612,7 +656,7 @@ def _score_preference(job: Job, preferences: dict) -> tuple[float, list[str], li
     else:
         city_score = 6.0
 
-    # 3. Career track (25%)
+    # 3. Career track
     career_tracks = preferences.get("career_track", [])
     if career_tracks:
         exact_track = any(ct.lower() in title_lower for ct in career_tracks)
@@ -628,7 +672,7 @@ def _score_preference(job: Job, preferences: dict) -> tuple[float, list[str], li
     else:
         track_score = 6.0
 
-    # 4. Deal-breaker (20%)
+    # 4. Deal-breaker
     deal_breakers = preferences.get("deal_breakers", [])
     if deal_breakers:
         found_db = [db for db in deal_breakers if db.lower() in jd_lower]
@@ -640,7 +684,7 @@ def _score_preference(job: Job, preferences: dict) -> tuple[float, list[str], li
     else:
         deal_score = 6.0
 
-    # 5. Salary floor (10%)
+    # 5. Salary floor
     min_salary = preferences.get("min_salary", 0)
     if min_salary and min_salary > 0:
         if job.salary_min >= min_salary:
@@ -655,15 +699,104 @@ def _score_preference(job: Job, preferences: dict) -> tuple[float, list[str], li
     else:
         salary_pref_score = 6.0
 
-    # Weighted sum
-    overall = round(
-        industry_score * 0.25
-        + city_score * 0.20
-        + track_score * 0.25
-        + deal_score * 0.20
-        + salary_pref_score * 0.10,
-        2,
-    )
+    # 6. Job type match (实习/全职)
+    job_type = preferences.get("job_type", "")
+    if job_type:
+        _JOB_TYPE_KEYWORDS: dict[str, list[str]] = {
+            "实习": ["实习", "intern"],
+            "全职": ["全职", "full-time", "full time"],
+            "兼职/自由职业": ["兼职", "part-time", "freelance", "自由"],
+        }
+        kws = _JOB_TYPE_KEYWORDS.get(job_type, [])
+        jd_has_type = any(kw in combined_text for kw in kws)
+        # Intern vs fulltime mismatch detection
+        is_intern_pref = job_type == "实习"
+        jd_is_intern = any(kw in combined_text for kw in ["实习", "intern"])
+        if jd_has_type:
+            job_type_score = 10.0
+            positives.append(f"工作类型匹配: {job_type}")
+        elif is_intern_pref and not jd_is_intern:
+            job_type_score = 4.0
+        elif not is_intern_pref and jd_is_intern:
+            job_type_score = 3.0
+            negatives.append("岗位为实习，但期望全职/兼职")
+        else:
+            job_type_score = 6.0
+    else:
+        job_type_score = 6.0
+
+    # 7. Remote preference
+    remote_preference = preferences.get("remote_preference", "")
+    if remote_preference:
+        jd_remote = any(kw in combined_text for kw in ["远程", "remote", "在家办公", "居家"])
+        jd_overseas = any(kw in combined_text for kw in ["海外", "overseas", "abroad"])
+        if remote_preference == "纯远程":
+            remote_score = 10.0 if jd_remote else 4.0
+            if jd_remote:
+                positives.append("支持远程办公")
+        elif remote_preference == "海外可以":
+            remote_score = 10.0 if (jd_remote or jd_overseas) else 6.0
+        elif remote_preference == "只接受国内线下":
+            remote_score = 4.0 if jd_overseas else 8.0
+            if jd_overseas:
+                negatives.append("岗位可能在海外")
+        else:
+            remote_score = 7.0  # "都可以"
+    else:
+        remote_score = 6.0
+
+    # Determine weights based on which fields are present
+    has_job_type = bool(job_type)
+    has_remote = bool(remote_preference)
+
+    if has_job_type and has_remote:
+        # Full weights with all 7 dimensions
+        overall = round(
+            industry_score * 0.20
+            + city_score * 0.15
+            + track_score * 0.20
+            + deal_score * 0.15
+            + salary_pref_score * 0.10
+            + job_type_score * 0.10
+            + remote_score * 0.10,
+            2,
+        )
+    elif has_job_type or has_remote:
+        # 6 dimensions: give extra weight to active new field
+        extra = job_type_score if has_job_type else remote_score
+        overall = round(
+            industry_score * 0.22
+            + city_score * 0.17
+            + track_score * 0.22
+            + deal_score * 0.17
+            + salary_pref_score * 0.10
+            + extra * 0.12,
+            2,
+        )
+    else:
+        # Legacy: 5 dimensions (backward compatible)
+        overall = round(
+            industry_score * 0.25
+            + city_score * 0.20
+            + track_score * 0.25
+            + deal_score * 0.20
+            + salary_pref_score * 0.10,
+            2,
+        )
+
+    # 8. Role fit — apply multiplier and weak_match cap
+    role_fit = preferences.get("role_fit", {})
+    if role_fit:
+        rf = _score_role_fit(title_lower, jd_lower, role_fit)
+        overall = round(overall * rf, 2)
+        if rf >= 1.0:
+            positives.append("岗位适配度高")
+        elif rf >= 0.7:
+            positives.append("岗位适配度中")
+        elif rf <= 0.3:
+            overall = min(overall, 5.0)
+            negatives.append("岗位适配度低，分数上限 5.0")
+
     return (overall, positives, negatives)
 
 
@@ -719,6 +852,13 @@ def _heuristic_score(profile: Profile, job: Job) -> JobScore:
         overall = ability
 
     overall = min(10.0, max(1.0, overall))
+
+    # Role fit hard cap on final overall (weak_match → max 5.0)
+    role_fit = preferences.get("role_fit", {}) if preferences else {}
+    if role_fit:
+        rf = _score_role_fit(job.title.lower(), (job.jd_text or "").lower(), role_fit)
+        if rf <= 0.3:
+            overall = min(overall, 5.0)
 
     # Build highlights
     highlights: list[str] = []
