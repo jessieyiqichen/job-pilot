@@ -1,0 +1,36 @@
+# JobPilot Resume Configuration
+# Copy this file to resume_config.yaml and fill in your details.
+# AI tailoring uses this as the source of truth — it will NOT add skills you don't have.
+
+name: "Your Name"
+email: "your@email.com"
+phone: "123-456-7890"
+location: "City, Country"
+github: "https://github.com/yourusername"
+
+resume_source: "/path/to/your/resume.docx"
+
+skills:
+  - category: "Language"
+    items:
+      - "English (Native)"
+
+  - category: "Software"
+    items:
+      - "Python (Expert)"
+      - "R (Proficient)"
+      - "SQL (Proficient)"
+
+  - category: "Methods"
+    items:
+      - "Machine learning"
+      - "Data visualization"
+      - "Statistical analysis"
+
+preferences:
+  preferred_industries: ["Tech", "Finance"]
+  preferred_company_size: ["Large", "Medium"]
+  preferred_cities: ["Shanghai", "Beijing"]
+  career_track: ["Data Analyst", "Business Analyst"]
+  deal_breakers: ["996"]
+  min_salary: 8000

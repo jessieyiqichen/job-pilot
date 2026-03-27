@@ -1,0 +1,773 @@
+"""
+JobPilot CLI — typer-based command-line interface.
+
+Commands:
+  jobpilot resume <path>          Parse and store a resume
+  jobpilot search <query>         Search jobs and store results
+  jobpilot score                  AI-score all unscored jobs
+  jobpilot list                   List jobs with scores
+  jobpilot status <job_id> <st>   Update application status
+  jobpilot tailor <job_id>        Tailor resume for a specific job
+  jobpilot pdf <md_path>          Convert Markdown resume to PDF
+  jobpilot report                 Generate daily report
+  jobpilot stats                  Show database stats
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+from pathlib import Path
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from jobpilot import __version__, config
+from jobpilot.db import JobPilotDB
+
+app = typer.Typer(
+    name="jobpilot",
+    help="JobPilot — AI-powered job hunting assistant",
+    no_args_is_help=True,
+)
+console = Console()
+
+
+def _get_db() -> JobPilotDB:
+    return JobPilotDB()
+
+
+def _setup_logging(verbose: bool) -> None:
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
+# ------------------------------------------------------------------
+# resume — parse and store
+# ------------------------------------------------------------------
+@app.command()
+def resume(
+    path: str = typer.Argument(..., help="Path to resume file (PDF/DOCX/MD)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Parse a resume and store the structured profile."""
+    _setup_logging(verbose)
+    from jobpilot.ai.parser import parse_resume
+
+    resume_path = Path(path).expanduser().resolve()
+    if not resume_path.exists():
+        console.print(f"[red]File not found: {resume_path}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"Parsing resume: {resume_path.name}...")
+    profile = parse_resume(resume_path)
+
+    db = _get_db()
+    profile_id = db.upsert_profile(profile)
+    console.print(f"[green]Profile saved (id={profile_id}): {profile.name}[/green]")
+
+    # Show structured data summary
+    s = profile.structured
+    if s:
+        console.print(f"\n  Name: {s.get('name', 'N/A')}")
+        console.print(f"  Title: {s.get('title', 'N/A')}")
+        console.print(f"  Experience: {s.get('years_of_experience', 'N/A')} years")
+        skills = s.get("skills", {})
+        all_skills = []
+        for v in skills.values():
+            if isinstance(v, list):
+                all_skills.extend(v)
+        if all_skills:
+            console.print(f"  Skills: {', '.join(all_skills[:15])}")
+        edu = s.get("education", [])
+        if edu:
+            latest = edu[0]
+            console.print(
+                f"  Education: {latest.get('school', '')} "
+                f"({latest.get('degree', '')}, {latest.get('major', '')})"
+            )
+
+
+# ------------------------------------------------------------------
+# search — find jobs
+# ------------------------------------------------------------------
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Search keywords (e.g. 'Python开发')"),
+    city: str = typer.Option(config.DEFAULT_CITY, "--city", "-c"),
+    experience: str = typer.Option("", "--experience", "-e", help="e.g. '3-5年'"),
+    salary: str = typer.Option("", "--salary", "-s", help="e.g. '15-25K'"),
+    platform: str = typer.Option(config.DEFAULT_PLATFORM, "--platform", "-p"),
+    score: bool = typer.Option(False, "--score", help="Auto-score results"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Search for jobs on recruitment platforms."""
+    _setup_logging(verbose)
+    from jobpilot.adapters.base import SearchFilters
+    from jobpilot.adapters.boss import BossAdapter
+    from jobpilot.adapters.websearch import WebSearchAdapter
+
+    adapters = {"boss": BossAdapter, "websearch": WebSearchAdapter}
+    adapter_cls = adapters.get(platform)
+    if not adapter_cls:
+        console.print(f"[red]Unknown platform: {platform}. Available: {list(adapters.keys())}[/red]")
+        raise typer.Exit(1)
+
+    adapter = adapter_cls()
+    filters = SearchFilters(city=city, experience=experience, salary_range=salary)
+
+    console.print(f"Searching '{query}' on {platform} (city={city})...")
+    jobs = adapter.search(query, filters)
+
+    # Fallback: use web search when boss returns too few results
+    if len(jobs) < config.WEBSEARCH_FALLBACK_THRESHOLD and platform != "websearch":
+        if config.ANTHROPIC_API_KEY:
+            console.print("[yellow]Boss 结果较少，启动 web 搜索...[/yellow]")
+            web_adapter = WebSearchAdapter()
+            web_jobs = web_adapter.search(query, filters)
+            jobs.extend(web_jobs)
+            console.print(f"[green]Web 搜索补充 {len(web_jobs)} 条岗位[/green]")
+
+    if not jobs:
+        console.print("[yellow]No jobs found.[/yellow]")
+        raise typer.Exit(0)
+
+    db = _get_db()
+    count = db.upsert_jobs(jobs)
+    console.print(f"[green]Found {count} jobs, saved to database.[/green]\n")
+
+    # Display results
+    table = Table(title=f"Search Results: {query}")
+    table.add_column("ID", style="dim", max_width=12)
+    table.add_column("Title", style="bold")
+    table.add_column("Company")
+    table.add_column("Salary")
+    table.add_column("City")
+    table.add_column("Exp")
+
+    for job in jobs:
+        salary_str = (
+            f"{job.salary_min // 1000}-{job.salary_max // 1000}K"
+            if job.salary_max
+            else "面议"
+        )
+        table.add_row(
+            job.job_id[:12],
+            job.title,
+            job.company,
+            salary_str,
+            job.city,
+            job.experience,
+        )
+
+    console.print(table)
+
+    # Auto-score if requested
+    if score:
+        _do_score(db, verbose)
+
+
+# ------------------------------------------------------------------
+# score — AI match scoring
+# ------------------------------------------------------------------
+@app.command()
+def score(
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID to match against"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Max jobs to score"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """AI-score unscored jobs against your profile."""
+    _setup_logging(verbose)
+    db = _get_db()
+    _do_score(db, verbose, profile_id, limit)
+
+
+def _do_score(
+    db: JobPilotDB,
+    verbose: bool = False,
+    profile_id: int = 1,
+    limit: int = 50,
+) -> None:
+    """Internal scoring logic shared by search --score and score command."""
+    from jobpilot.ai.scorer import score_jobs
+
+    profile = db.get_profile(profile_id)
+    if not profile:
+        console.print("[red]No profile found. Run 'jobpilot resume <file>' first.[/red]")
+        raise typer.Exit(1)
+
+    # Get unscored jobs
+    new_jobs = db.list_jobs(status="new", limit=limit)
+    if not new_jobs:
+        console.print("[yellow]No unscored jobs found.[/yellow]")
+        return
+
+    console.print(f"Scoring {len(new_jobs)} jobs against profile '{profile.name}'...")
+    scores = score_jobs(profile, new_jobs)
+
+    # Save scores and update status
+    for s in scores:
+        db.upsert_score(s)
+        db.update_job_status(s.job_id, "scored")
+
+    console.print(f"[green]Scored {len(scores)} jobs.[/green]\n")
+
+    # Display top results
+    table = Table(title="Top Matches")
+    table.add_column("Score", justify="center")
+    table.add_column("Title", style="bold")
+    table.add_column("Company")
+    table.add_column("Skills", style="dim")
+    table.add_column("Suggestion", max_width=40)
+
+    for s in scores[:10]:
+        job = db.get_job(s.job_id)
+        color = "green" if s.overall_score >= 7 else "yellow" if s.overall_score >= 5 else "red"
+        table.add_row(
+            f"[{color}]{s.overall_score:.1f}[/{color}]",
+            job.title if job else s.job_id,
+            job.company if job else "",
+            f"{s.skill_match:.1f}",
+            s.suggestion[:40] + "..." if len(s.suggestion) > 40 else s.suggestion,
+        )
+
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# list — show jobs with scores
+# ------------------------------------------------------------------
+@app.command(name="list")
+def list_jobs(
+    status: str = typer.Option("", "--status", "-s", help="Filter by status"),
+    min_score: float = typer.Option(0.0, "--min-score", "-m", help="Minimum score"),
+    limit: int = typer.Option(20, "--limit", "-l"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """List jobs with their scores."""
+    _setup_logging(verbose)
+    db = _get_db()
+
+    if min_score > 0:
+        results = db.list_scores_with_jobs(min_score=min_score, limit=limit)
+        table = Table(title=f"Jobs (score >= {min_score})")
+        table.add_column("Score", justify="center")
+        table.add_column("Title", style="bold")
+        table.add_column("Company")
+        table.add_column("City")
+        table.add_column("Salary")
+        table.add_column("Status")
+
+        for score_obj, job in results:
+            salary = f"{job.salary_min // 1000}-{job.salary_max // 1000}K" if job.salary_max else "面议"
+            color = "green" if score_obj.overall_score >= 7 else "yellow"
+            table.add_row(
+                f"[{color}]{score_obj.overall_score:.1f}[/{color}]",
+                job.title,
+                job.company,
+                job.city,
+                salary,
+                job.status,
+            )
+        console.print(table)
+    else:
+        jobs = db.list_jobs(status=status or None, limit=limit)
+        table = Table(title="Jobs")
+        table.add_column("ID", style="dim", max_width=12)
+        table.add_column("Title", style="bold")
+        table.add_column("Company")
+        table.add_column("City")
+        table.add_column("Status")
+
+        for job in jobs:
+            table.add_row(job.job_id[:12], job.title, job.company, job.city, job.status)
+        console.print(table)
+
+
+# ------------------------------------------------------------------
+# detail — show job detail + score
+# ------------------------------------------------------------------
+@app.command()
+def detail(
+    job_id: str = typer.Argument(..., help="Job ID to show details for"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Show detailed info for a specific job."""
+    _setup_logging(verbose)
+    db = _get_db()
+
+    job = db.get_job(job_id)
+    if not job:
+        console.print(f"[red]Job not found: {job_id}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"\n[bold]{job.title}[/bold] @ {job.company}")
+    console.print(f"  City: {job.city}")
+    salary = f"{job.salary_min // 1000}-{job.salary_max // 1000}K" if job.salary_max else "面议"
+    console.print(f"  Salary: {salary}")
+    console.print(f"  Experience: {job.experience}")
+    console.print(f"  Education: {job.education}")
+    console.print(f"  Status: {job.status}")
+    console.print(f"  Platform: {job.platform}")
+    console.print(f"  Discovered: {job.discovered_at}")
+    console.print(f"\n[bold]Job Description:[/bold]")
+    console.print(job.jd_text or "(no JD available)")
+
+    score_obj = db.get_score(job_id)
+    if score_obj:
+        console.print(f"\n[bold]AI Score:[/bold] {score_obj.overall_score:.1f}/10")
+        console.print(f"  Skill Match: {score_obj.skill_match:.1f}")
+        console.print(f"  Experience Match: {score_obj.experience_match:.1f}")
+        console.print(f"  Salary Match: {score_obj.salary_match:.1f}")
+        if score_obj.highlights:
+            console.print(f"\n  [green]Highlights:[/green]")
+            for h in score_obj.highlights:
+                console.print(f"    + {h}")
+        if score_obj.concerns:
+            console.print(f"\n  [yellow]Concerns:[/yellow]")
+            for c in score_obj.concerns:
+                console.print(f"    - {c}")
+        if score_obj.suggestion:
+            console.print(f"\n  [blue]Suggestion:[/blue] {score_obj.suggestion}")
+
+
+# ------------------------------------------------------------------
+# status — update application status
+# ------------------------------------------------------------------
+@app.command()
+def status(
+    job_id: str = typer.Argument(..., help="Job ID"),
+    new_status: str = typer.Argument(..., help="New status"),
+    notes: str = typer.Option("", "--notes", "-n", help="Add notes"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Update application status for a job."""
+    _setup_logging(verbose)
+    from jobpilot.tracker import TrackerError, update_status
+
+    db = _get_db()
+    try:
+        app_record = update_status(db, job_id, new_status, notes)
+        console.print(
+            f"[green]Updated: {job_id} → {app_record.status}[/green]"
+        )
+    except TrackerError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+# ------------------------------------------------------------------
+# tailor — customize resume for a job
+# ------------------------------------------------------------------
+@app.command()
+def tailor(
+    job_id: str = typer.Argument(None, help="Job ID to tailor resume for"),
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
+    output: str = typer.Option("", "--output", "-o", help="Output directory"),
+    from_text: str = typer.Option("", "--from-text", help="Import tailored text from file (for no-API workflow)"),
+    top: int = typer.Option(0, "--top", "-t", help="Batch tailor top N scored jobs"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Tailor your resume for a specific job posting."""
+    _setup_logging(verbose)
+
+    db = _get_db()
+    output_dir = Path(output) if output else None
+
+    if top > 0:
+        # Batch tailor mode
+        _batch_tailor(db, profile_id, top, output_dir, verbose)
+        return
+
+    if not job_id:
+        console.print("[red]请指定 job_id 或使用 --top N 批量定制[/red]")
+        raise typer.Exit(1)
+
+    if from_text:
+        # --from-text mode: only need job, no profile
+        from jobpilot.ai.tailor import tailor_from_text
+
+        job = db.get_job(job_id)
+        if not job:
+            console.print(f"[red]Job not found: {job_id}[/red]")
+            raise typer.Exit(1)
+
+        text_path = Path(from_text).expanduser().resolve()
+        if not text_path.exists():
+            console.print(f"[red]File not found: {text_path}[/red]")
+            raise typer.Exit(1)
+
+        text = text_path.read_text(encoding="utf-8")
+        console.print(f"Importing tailored text for: [bold]{job.title}[/bold] @ {job.company}...")
+        result_path = tailor_from_text(text, job, output_dir)
+    else:
+        # Standard AI-powered tailor flow (original check order preserved)
+        from jobpilot.ai.tailor import save_tailored_resume
+
+        profile = db.get_profile(profile_id)
+        if not profile:
+            console.print("[red]No profile found. Run 'jobpilot resume <file>' first.[/red]")
+            raise typer.Exit(1)
+
+        job = db.get_job(job_id)
+        if not job:
+            console.print(f"[red]Job not found: {job_id}[/red]")
+            raise typer.Exit(1)
+
+        console.print(f"Tailoring resume for: [bold]{job.title}[/bold] @ {job.company}...")
+        result_path = save_tailored_resume(profile, job, output_dir)
+
+    db.update_job_status(job_id, "tailored")
+    console.print(f"[green]Tailored resume saved: {result_path}[/green]")
+    console.print(f"[green]Job status updated to 'tailored'[/green]")
+    console.print("[dim]下一步: jobpilot apply 选择岗位投递[/dim]")
+
+
+def _batch_tailor(
+    db: JobPilotDB,
+    profile_id: int,
+    top_n: int,
+    output_dir: Path | None,
+    verbose: bool,
+) -> None:
+    """Batch tailor top N scored but untailored jobs."""
+    import time
+
+    from jobpilot.ai.tailor import save_tailored_resume
+
+    profile = db.get_profile(profile_id)
+    if not profile:
+        console.print("[red]No profile found. Run 'jobpilot resume <file>' first.[/red]")
+        raise typer.Exit(1)
+
+    candidates = db.list_top_untailored(profile_id, limit=top_n)
+    if not candidates:
+        console.print("[yellow]没有待定制的已评分岗位。[/yellow]")
+        return
+
+    console.print(f"批量定制 {len(candidates)} 个岗位简历...\n")
+    success = 0
+    for i, (score_obj, job) in enumerate(candidates, 1):
+        console.print(
+            f"[{i}/{len(candidates)}] {job.company} - {job.title} "
+            f"(score: {score_obj.overall_score:.1f})...",
+            end=" ",
+        )
+        try:
+            save_tailored_resume(profile, job, output_dir)
+            db.update_job_status(job.job_id, "tailored")
+            console.print("[green]OK[/green]")
+            success += 1
+            if i < len(candidates) and config.ANTHROPIC_API_KEY:
+                time.sleep(1)
+        except Exception as e:
+            console.print(f"[red]FAIL: {e}[/red]")
+
+    console.print(f"\n[green]完成: {success}/{len(candidates)} 份简历已定制[/green]")
+    console.print("[dim]下一步: jobpilot apply 选择岗位投递[/dim]")
+
+
+# ------------------------------------------------------------------
+# apply — select jobs to apply
+# ------------------------------------------------------------------
+@app.command()
+def apply(
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
+    min_score: float = typer.Option(7.0, "--min-score", "-m", help="Minimum score"),
+    limit: int = typer.Option(15, "--limit", "-l", help="Max jobs to show"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Select high-scored jobs to mark as applied."""
+    _setup_logging(verbose)
+    from jobpilot.tracker import TrackerError, update_status
+
+    db = _get_db()
+    candidates = db.list_top_scored_jobs(
+        profile_id=profile_id, min_score=min_score, limit=limit,
+    )
+
+    if not candidates:
+        console.print("[yellow]没有符合条件的岗位。先运行 jobpilot score 评分。[/yellow]")
+        return
+
+    # Display candidates
+    table = Table(title="可投递岗位")
+    table.add_column("#", justify="right", style="bold")
+    table.add_column("Score", justify="center")
+    table.add_column("Title", style="bold")
+    table.add_column("Company")
+    table.add_column("City")
+    table.add_column("Salary")
+    table.add_column("Status")
+
+    for idx, (score_obj, job) in enumerate(candidates, 1):
+        salary = (
+            f"{job.salary_min // 1000}-{job.salary_max // 1000}K"
+            if job.salary_max else "面议"
+        )
+        color = "green" if score_obj.overall_score >= 8 else "yellow"
+        table.add_row(
+            str(idx),
+            f"[{color}]{score_obj.overall_score:.1f}[/{color}]",
+            job.title,
+            job.company,
+            job.city,
+            salary,
+            job.status,
+        )
+
+    console.print(table)
+
+    # Interactive selection
+    selection = typer.prompt(
+        "选择编号（逗号分隔，q 退出）", default="q"
+    )
+
+    if selection.strip().lower() == "q":
+        console.print("[dim]已退出[/dim]")
+        return
+
+    # Parse selected indices
+    selected_indices: list[int] = []
+    for part in selection.split(","):
+        part = part.strip()
+        if part.isdigit():
+            idx = int(part)
+            if 1 <= idx <= len(candidates):
+                selected_indices.append(idx)
+            else:
+                console.print(f"[yellow]忽略无效编号: {part}[/yellow]")
+        elif part:
+            console.print(f"[yellow]忽略无效输入: {part}[/yellow]")
+
+    if not selected_indices:
+        console.print("[yellow]未选择任何岗位[/yellow]")
+        return
+
+    # Mark selected as applied
+    applied_count = 0
+    for idx in selected_indices:
+        score_obj, job = candidates[idx - 1]
+        try:
+            update_status(db, job.job_id, "applied")
+            console.print(f"  [green]✓ {job.company} - {job.title}[/green]")
+            applied_count += 1
+        except TrackerError as e:
+            console.print(f"  [red]✗ {job.company} - {job.title}: {e}[/red]")
+
+    console.print(f"\n[green]已标记 {applied_count} 个岗位为「已投递」[/green]")
+
+
+# ------------------------------------------------------------------
+# pipeline — show application funnel
+# ------------------------------------------------------------------
+@app.command()
+def pipeline(
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Show application pipeline funnel."""
+    _setup_logging(verbose)
+
+    db = _get_db()
+
+    # Gather counts
+    total = db.count_jobs()
+    scored_count = db.count_jobs(status="scored")
+    tailored_count = db.count_jobs(status="tailored")
+
+    # Count from applications table for later stages
+    applied_apps = db.list_applications(status="applied")
+    interview_apps = db.list_applications(status="interview")
+    offer_apps = db.list_applications(status="offer")
+    rejected_apps = db.list_applications(status="rejected")
+    replied_apps = db.list_applications(status="replied")
+
+    # High-score count
+    high_scores = db.list_scores(profile_id=profile_id, min_score=7.0, limit=9999)
+    high_score_count = len(high_scores)
+
+    stages = [
+        ("搜索", total),
+        ("高分(>=7)", high_score_count),
+        ("已评分", scored_count),
+        ("已定制", tailored_count),
+        ("已投递", len(applied_apps)),
+        ("已回复", len(replied_apps)),
+        ("面试中", len(interview_apps)),
+        ("Offer", len(offer_apps)),
+        ("已拒绝", len(rejected_apps)),
+    ]
+
+    max_count = max((c for _, c in stages), default=1) or 1
+    max_bar = 20
+
+    console.print("\n[bold]📊 求职漏斗[/bold]\n")
+    for label, count in stages:
+        bar_len = int(count / max_count * max_bar) if max_count > 0 else 0
+        bar = "█" * bar_len
+        console.print(f"  {label:<10} {bar:<{max_bar}}  {count}")
+    console.print()
+
+
+# ------------------------------------------------------------------
+# import-xhs — import jobs from XHS favorites JSON
+# ------------------------------------------------------------------
+@app.command(name="import-xhs")
+def import_xhs(
+    json_file: str = typer.Argument(..., help="Path to JSON file with XHS job data"),
+    score: bool = typer.Option(False, "--score", help="Auto-score imported jobs"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Import jobs from XHS (小红书) favorites JSON file."""
+    import json
+
+    _setup_logging(verbose)
+    from jobpilot.adapters.xhs import parse_xhs_jobs
+
+    file_path = Path(json_file).expanduser().resolve()
+    if not file_path.exists():
+        console.print(f"[red]File not found: {file_path}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        console.print(f"[red]Invalid JSON: {e}[/red]")
+        raise typer.Exit(1)
+
+    if not isinstance(data, list):
+        console.print("[red]JSON file must contain an array of job objects.[/red]")
+        raise typer.Exit(1)
+
+    jobs = parse_xhs_jobs(data)
+    if not jobs:
+        console.print("[yellow]No valid job entries found in JSON.[/yellow]")
+        raise typer.Exit(0)
+
+    db = _get_db()
+    count = db.upsert_jobs(jobs)
+    console.print(f"[green]Imported {count} jobs from XHS.[/green]\n")
+
+    # Display results
+    table = Table(title="XHS Imported Jobs")
+    table.add_column("ID", style="dim", max_width=12)
+    table.add_column("Title", style="bold")
+    table.add_column("Company")
+    table.add_column("Salary")
+    table.add_column("City")
+
+    for job in jobs:
+        salary_str = (
+            f"{job.salary_min // 1000}-{job.salary_max // 1000}K"
+            if job.salary_max
+            else "面议"
+        )
+        table.add_row(
+            job.job_id[:12],
+            job.title,
+            job.company,
+            salary_str,
+            job.city,
+        )
+
+    console.print(table)
+
+    if score:
+        _do_score(db, verbose)
+
+
+# ------------------------------------------------------------------
+# pdf — convert Markdown resume to PDF
+# ------------------------------------------------------------------
+@app.command()
+def pdf(
+    md_path: str = typer.Argument(..., help="Path to Markdown resume"),
+    output: str = typer.Option("", "--output", "-o", help="Output PDF path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Convert a Markdown resume to PDF."""
+    _setup_logging(verbose)
+
+    md_file = Path(md_path).expanduser().resolve()
+    if not md_file.exists():
+        console.print(f"[red]File not found: {md_file}[/red]")
+        raise typer.Exit(1)
+
+    output_path = Path(output).expanduser().resolve() if output else None
+
+    try:
+        from jobpilot.resume.generator import markdown_to_pdf
+
+        result_path = markdown_to_pdf(md_file, output_path)
+        console.print(f"[green]PDF generated: {result_path}[/green]")
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+
+# ------------------------------------------------------------------
+# report — daily summary
+# ------------------------------------------------------------------
+@app.command()
+def report(
+    output: str = typer.Option("", "--output", "-o", help="Output file path"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Generate a daily report."""
+    _setup_logging(verbose)
+    from jobpilot.report import generate_daily_report, save_report
+
+    db = _get_db()
+
+    if output:
+        path = save_report(db, output)
+        console.print(f"[green]Report saved to {path}[/green]")
+    else:
+        md = generate_daily_report(db)
+        console.print(md)
+
+
+# ------------------------------------------------------------------
+# stats — database statistics
+# ------------------------------------------------------------------
+@app.command()
+def stats(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Show database statistics."""
+    _setup_logging(verbose)
+    db = _get_db()
+    s = db.get_stats()
+
+    table = Table(title="JobPilot Stats")
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+
+    table.add_row("Profiles", str(s["profiles"]))
+    table.add_row("Jobs (total)", str(s["jobs_total"]))
+    table.add_row("Jobs (new)", str(s["jobs_new"]))
+    table.add_row("Jobs (scored)", str(s["jobs_scored"]))
+    table.add_row("Scores", str(s["scores"]))
+    table.add_row("Applications", str(s["applications"]))
+    table.add_row("Avg Score", str(s["avg_score"]))
+
+    console.print(table)
+
+
+# ------------------------------------------------------------------
+# version
+# ------------------------------------------------------------------
+@app.command()
+def version() -> None:
+    """Show version."""
+    console.print(f"JobPilot v{__version__}")
+
+
+if __name__ == "__main__":
+    app()

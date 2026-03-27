@@ -1,0 +1,41 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Data (user-specific, not committed)
+data/jobpilot.db
+data/jobpilot.db-wal
+data/jobpilot.db-shm
+data/resumes/
+data/tailored/
+data/report_*.md
+data/resume_config.yaml
+data/xhs_jobs.json
+data/xhs_favorites_raw.json
+data/*.md
+.DS_Store
+
+# Scripts (debug)
+scripts/debug_*.js
+
+# Claude (personal CLAUDE.md has local paths; example is committed)
+CLAUDE.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Environment
+.env
+.venv/
+venv/
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/

@@ -1,0 +1,176 @@
+# JobPilot — 智能求职助手
+
+## 项目概览
+AI驱动的中国招聘平台智能求职助手。不做爬虫，在现有开源工具（boss-cli等）之上做 AI 匹配打分 + 简历定制 + 投递追踪 + 日报汇总。
+
+## 架构
+```
+JobPilot (AI 智能层)
+    ├── AI 匹配 & 打分 (Claude API)
+    ├── 简历定制 (Proficiently 方法论 + 原 docx patch)
+    └── 日报 & 追踪
+        │
+    统一 Adapter 层
+        │
+    ├── boss-cli (kabi-boss-cli)
+    ├── websearch (Anthropic web_search tool, boss 结果少时自动回退)
+    └── xhs (小红书收藏导入，rednote-mcp → Claude AI 提取 → JSON → import-xhs)
+```
+
+## 项目结构
+```
+job-pilot/
+├── pyproject.toml              # hatchling 构建，CLI 入口 jobpilot
+├── src/jobpilot/
+│   ├── cli.py                  # typer CLI：15 个命令（含 import-xhs, apply, pipeline）
+│   ├── config.py               # 配置（环境变量驱动）
+│   ├── db.py                   # SQLite 数据层（4 表，WAL 模式）
+│   ├── models.py               # frozen dataclass: Profile/Job/JobScore/Application
+│   ├── tracker.py              # 投递状态机（new→scored→applied→...→offer/rejected）
+│   ├── report.py               # Markdown 日报生成
+│   ├── adapters/
+│   │   ├── base.py             # 抽象接口 BaseAdapter
+│   │   ├── boss.py             # Boss直聘适配器（subprocess 调用 boss-cli）
+│   │   ├── websearch.py        # Web搜索适配器（Anthropic API + web_search tool）
+│   │   └── xhs.py              # 小红书收藏导入（parse-only，不做搜索）
+│   ├── ai/
+│   │   ├── parser.py           # 简历解析（PDF/DOCX/MD → Claude API → JSON）
+│   │   ├── scorer.py           # AI 匹配打分（多维度 1-10）
+│   │   └── tailor.py           # 简历定制（Proficiently 方法论）
+│   └── resume/
+│       └── generator.py        # PDF 生成（需 weasyprint）
+├── data/
+│   ├── jobpilot.db             # SQLite（gitignore）
+│   ├── resume_config.yaml      # 简历技能主数据（手动维护，AI 不能添加）
+│   ├── resumes/                # 原始简历
+│   └── tailored/               # 定制简历输出（.docx）
+└── tests/                      # 179 个测试，全部通过
+```
+
+## 技术栈
+- Python 3.12+, typer, rich, anthropic SDK, pymupdf, python-docx, pydantic
+- SQLite（WAL 模式，connection-per-call）
+- boss-cli (`pip install kabi-boss-cli`) — Boss直聘 CLI 工具
+- rednote-mcp (npm global) — 小红书 MCP 工具（Playwright 浏览器自动化）
+
+## CLI 命令
+```bash
+jobpilot resume <path>              # 解析简历 → 存入 profiles 表
+jobpilot search <query> --city 上海  # 搜索岗位 → 存入 jobs 表
+jobpilot score                       # AI 打分所有未评分岗位
+jobpilot list --min-score 7          # 查看高分岗位
+jobpilot detail <job_id>             # 查看岗位详情 + 评分
+jobpilot status <job_id> <status>    # 更新投递状态
+jobpilot tailor <job_id>             # 为指定岗位定制简历（输出 .docx）
+jobpilot tailor --top 5              # 批量定制 top 5 已评分岗位
+jobpilot tailor <job_id> --from-text <file>  # 导入外部文本生成 .docx（无API workflow）
+jobpilot import-xhs <json_file>      # 从小红书收藏 JSON 导入岗位
+jobpilot import-xhs <json> --score   # 导入并自动评分
+jobpilot apply                       # 交互式选择岗位标记为已投递
+jobpilot pipeline                    # 显示求职漏斗（各阶段统计）
+jobpilot pdf <md_path>               # Markdown 简历转 PDF
+jobpilot report                      # 生成日报
+jobpilot stats                       # 数据库统计
+```
+
+## 简历定制流程（核心功能）
+
+### 流程概览
+```
+原简历 .docx ──→ AI 生成 tailored 纯文本 ──→ patch 回原 docx ──→ 输出 .docx
+     │                    │                         │
+     │            Proficiently 方法论          difflib 对齐
+     │            (prompt 内嵌完整规则)        只改文字不动格式
+     │
+  resume_config.yaml
+  (verified skills 白名单)
+```
+
+### 三步走
+1. **AI 生成 tailored 纯文本** — Claude API + Proficiently 方法论 prompt
+2. **复制原简历 .docx** — `shutil.copy2` 保留所有字体/格式/排版
+3. **difflib 对齐替换** — SequenceMatcher 找出变化段落，只改文字内容
+
+### Proficiently 方法论（内嵌在 prompt 中）
+- **Tailoring Philosophy**: 重组真实经历让 hiring manager 一眼看到匹配，不是造假
+- **7 秒扫描测试**: Summary 直接对标岗位，最相关经历放最前面
+- **Bullet 公式**: [Action verb] + [what you did] + [scale] + [measurable result]
+- **Writing Rules (Flesch >90)**: 短句、一句一个意思、禁用 emdash、禁用 filler phrases
+- **Strict Accuracy**: 不捏造、不膨胀范围、不假设商业模式、不添加未有技能
+- **Self-Critique**: 逐句杀 AI 味（no LinkedIn/ChatGPT style）
+- **Quality Checks**: 12 项验证清单（metrics in 60%+ bullets, every bullet traces to source）
+
+### 关键规则
+- **输出 .docx 不是 .txt/md** — 基于原简历 patch，保留 Times New Roman 等所有格式
+- **不动 structural 段落** — bold 标题行、tab 对齐日期行、section headers 不替换
+- **Skills 白名单** — `data/resume_config.yaml` 手动维护，AI 不能自行添加技能
+- **原简历路径** — 配置在 `resume_config.yaml` 的 `resume_source` 字段
+
+## 小红书收藏导入流程
+
+### 端到端工作流
+```
+小红书收藏页 ──(rednote MCP get_favorites)──→ 笔记列表 (JSON)
+                                                │
+                                    Claude AI 识别招聘帖
+                                    提取结构化字段 (company/title/salary/city/jd...)
+                                                │
+                                        写入 JSON 文件
+                                                │
+                              jobpilot import-xhs <file> ──→ 数据库
+                                                              │
+                                                    score / tailor / apply
+```
+
+### XHS adapter 设计
+- `src/jobpilot/adapters/xhs.py` — **纯解析模块**，不是 BaseAdapter 子类（不做搜索，只做导入）
+- `parse_xhs_job(item: dict) -> Job | None` — 单条转换，缺 company/title 返回 None
+- `parse_xhs_jobs(items: list[dict]) -> list[Job]` — 批量转换，自动跳过无效项
+- `_generate_xhs_job_id(company, title, url)` — md5 hash 去重，跨次导入不重复
+- `_parse_salary()` — 支持 K/万/w/plain/到/~ 等中文招聘常见薪资格式
+
+### JSON 格式（AI 提取后的结构）
+```json
+[
+  {
+    "company": "字节跳动",
+    "title": "AI工程师",
+    "salary": "30-50K",
+    "city": "上海",
+    "experience": "3-5年",
+    "education": "本科",
+    "jd_text": "负责大模型应用开发...",
+    "source_url": "https://www.xiaohongshu.com/explore/abc123"
+  }
+]
+```
+
+## 数据库（SQLite，4 表）
+- `profiles` — 用户简历画像（structured JSON）
+- `jobs` — 岗位信息（job_id UNIQUE，平台去重）
+- `job_scores` — AI 匹配评分（UNIQUE job_id + profile_id）
+- `applications` — 投递追踪（状态机）
+
+## 配置（环境变量）
+```
+ANTHROPIC_API_KEY    — Claude API 密钥（必需，AI 功能）
+JOBPILOT_MODEL       — 模型名（默认 claude-sonnet-4-5-20250929）
+JOBPILOT_CITY        — 默认城市（默认 上海）
+JOBPILOT_PLATFORM    — 默认平台（默认 boss）
+BOSS_CLI_PATH        — boss-cli 路径（默认 boss）
+JOBPILOT_WEBSEARCH_THRESHOLD — web搜索回退阈值（默认 3，boss 结果少于此值时触发）
+```
+
+## 关键设计决策
+- **不做爬虫** — 通过 subprocess 调用 boss-cli，Adapter 模式隔离平台差异
+- **AI 可选降级** — 无 API key 时用启发式方法，不影响基本功能
+- **immutable models** — 所有 dataclass 用 `frozen=True`
+- **connection-per-call** — SQLite 连接不跨调用共享
+- **简历定制基于原 docx patch** — 不从头生成，保留用户的字体/排版/格式
+- **Skills 白名单制** — `resume_config.yaml` 手动维护，防止 AI 膨胀技能
+- **XHS import-only 模式** — 不是搜索 adapter，因为 XHS 职位发现靠收藏而非关键词搜索
+
+## 测试
+```bash
+python -m pytest tests/ -v        # 179 tests, all pass
+```
