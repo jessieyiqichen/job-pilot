@@ -196,12 +196,14 @@ def search(
 def score(
     profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID to match against"),
     limit: int = typer.Option(50, "--limit", "-l", help="Max jobs to score"),
+    heuristic: bool = typer.Option(False, "--heuristic", help="强制启发式评分（跳过 API，免费秒评）"),
+    refine: int = typer.Option(0, "--refine", "-r", help="对已评分 top N 岗位用 API 精评"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """AI-score unscored jobs against your profile."""
     _setup_logging(verbose)
     db = _get_db()
-    _do_score(db, verbose, profile_id, limit)
+    _do_score(db, verbose, profile_id, limit, heuristic=heuristic, refine=refine)
 
 
 def _do_score(
@@ -209,6 +211,9 @@ def _do_score(
     verbose: bool = False,
     profile_id: int = 1,
     limit: int = 50,
+    *,
+    heuristic: bool = False,
+    refine: int = 0,
 ) -> None:
     """Internal scoring logic shared by search --score and score command."""
     from jobpilot.ai.scorer import score_jobs
@@ -218,21 +223,35 @@ def _do_score(
         console.print("[red]No profile found. Run 'jobpilot resume <file>' first.[/red]")
         raise typer.Exit(1)
 
-    # Get unscored jobs
-    new_jobs = db.list_jobs(status="new", limit=limit)
-    if not new_jobs:
-        console.print("[yellow]No unscored jobs found.[/yellow]")
-        return
+    if refine > 0:
+        # Refine mode: re-score top N already-scored jobs with API
+        scored_pairs = db.list_scores_with_jobs(profile_id=profile_id, limit=refine)
+        if not scored_pairs:
+            console.print("[yellow]没有已评分岗位可精评。先运行 jobpilot score --heuristic[/yellow]")
+            return
+        jobs_to_refine = [job for _, job in scored_pairs]
+        console.print(f"对 top {len(jobs_to_refine)} 岗位用 API 精评...")
+        scores = score_jobs(profile, jobs_to_refine, force_heuristic=False)
+        for s in scores:
+            db.upsert_score(s)
+        console.print(f"[green]精评完成: {len(scores)} 个岗位已更新。[/green]\n")
+    else:
+        # Default mode: score unscored jobs
+        new_jobs = db.list_jobs(status="new", limit=limit)
+        if not new_jobs:
+            console.print("[yellow]No unscored jobs found.[/yellow]")
+            return
 
-    console.print(f"Scoring {len(new_jobs)} jobs against profile '{profile.name}'...")
-    scores = score_jobs(profile, new_jobs)
+        mode_label = "启发式" if heuristic else "AI"
+        console.print(f"[{mode_label}] Scoring {len(new_jobs)} jobs against profile '{profile.name}'...")
+        scores = score_jobs(profile, new_jobs, force_heuristic=heuristic)
 
-    # Save scores and update status
-    for s in scores:
-        db.upsert_score(s)
-        db.update_job_status(s.job_id, "scored")
+        # Save scores and update status
+        for s in scores:
+            db.upsert_score(s)
+            db.update_job_status(s.job_id, "scored")
 
-    console.print(f"[green]Scored {len(scores)} jobs.[/green]\n")
+        console.print(f"[green]Scored {len(scores)} jobs.[/green]\n")
 
     # Display top results
     table = Table(title="Top Matches")

@@ -333,6 +333,56 @@ class TestRoleFitInPreference:
         assert 1.0 <= score <= 10.0
 
 
+class TestForceHeuristic:
+    """Tests for force_heuristic parameter."""
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_force_heuristic_bypasses_api(self, mock_prefs, mock_config):
+        """With API key set, force_heuristic=True should still use heuristic."""
+        from jobpilot.ai.scorer import score_job
+
+        mock_config.ANTHROPIC_API_KEY = "sk-test-key-exists"
+        mock_prefs.return_value = SAMPLE_PREFS
+        profile = _make_profile()
+        job = _make_job()
+        # Should NOT call Anthropic API — returns heuristic score
+        result = score_job(profile, job, force_heuristic=True)
+        assert isinstance(result, JobScore)
+        assert 1.0 <= result.overall_score <= 10.0
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_force_heuristic_false_with_no_key_still_heuristic(self, mock_prefs, mock_config):
+        """force_heuristic=False with no API key should still use heuristic."""
+        from jobpilot.ai.scorer import score_job
+
+        mock_config.ANTHROPIC_API_KEY = ""
+        mock_prefs.return_value = SAMPLE_PREFS
+        profile = _make_profile()
+        job = _make_job()
+        result = score_job(profile, job, force_heuristic=False)
+        assert isinstance(result, JobScore)
+        assert 1.0 <= result.overall_score <= 10.0
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_score_jobs_passes_force_heuristic(self, mock_prefs, mock_config):
+        """score_jobs should pass force_heuristic through to score_job."""
+        from jobpilot.ai.scorer import score_jobs
+
+        mock_config.ANTHROPIC_API_KEY = "sk-test-key-exists"
+        mock_prefs.return_value = SAMPLE_PREFS
+        profile = _make_profile()
+        jobs = [_make_job(job_id="j1"), _make_job(job_id="j2")]
+        # Should NOT call API — returns heuristic scores
+        results = score_jobs(profile, jobs, force_heuristic=True)
+        assert len(results) == 2
+        for r in results:
+            assert isinstance(r, JobScore)
+            assert 1.0 <= r.overall_score <= 10.0
+
+
 class TestRoleFitInHeuristic:
     """Tests for role_fit integration in _heuristic_score."""
 

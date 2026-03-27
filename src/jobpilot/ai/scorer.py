@@ -63,12 +63,13 @@ SCORING_PROMPT = """\
 只输出 JSON，不要其他文字。"""
 
 
-def score_job(profile: Profile, job: Job) -> JobScore:
+def score_job(profile: Profile, job: Job, *, force_heuristic: bool = False) -> JobScore:
     """Score how well a job matches a profile using AI.
 
     Args:
         profile: The candidate's profile
         job: The job to evaluate
+        force_heuristic: If True, always use heuristic scoring (skip API)
 
     Returns:
         JobScore with all dimensions filled
@@ -109,8 +110,11 @@ def score_job(profile: Profile, job: Job) -> JobScore:
         jd_text=job.jd_text,
     )
 
-    if not config.ANTHROPIC_API_KEY:
-        logger.warning("ANTHROPIC_API_KEY not set. Using heuristic scoring.")
+    if force_heuristic or not config.ANTHROPIC_API_KEY:
+        if force_heuristic:
+            logger.info("force_heuristic=True. Using heuristic scoring.")
+        else:
+            logger.warning("ANTHROPIC_API_KEY not set. Using heuristic scoring.")
         return _heuristic_score(profile, job)
 
     try:
@@ -144,8 +148,13 @@ def score_job(profile: Profile, job: Job) -> JobScore:
     )
 
 
-def score_jobs(profile: Profile, jobs: list[Job]) -> list[JobScore]:
+def score_jobs(profile: Profile, jobs: list[Job], *, force_heuristic: bool = False) -> list[JobScore]:
     """Score multiple jobs against a profile.
+
+    Args:
+        profile: The candidate's profile
+        jobs: Jobs to score
+        force_heuristic: If True, always use heuristic scoring (skip API)
 
     Returns:
         List of JobScores sorted by overall_score descending
@@ -154,7 +163,7 @@ def score_jobs(profile: Profile, jobs: list[Job]) -> list[JobScore]:
     for i, job in enumerate(jobs, 1):
         logger.info("Scoring job %d/%d: %s @ %s", i, len(jobs), job.title, job.company)
         try:
-            score = score_job(profile, job)
+            score = score_job(profile, job, force_heuristic=force_heuristic)
             scores.append(score)
         except Exception as e:
             logger.error("Failed to score job %s: %s", job.job_id, e)

@@ -16,43 +16,58 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 4: 小红书收藏导入端到端（03-26，179 tests）
 - Phase 5: setup问卷 + cli.py拆分 + merge逻辑（03-27，210 tests）
 - Phase 6: role_fit 岗位适配度（03-27，226 tests）
+- Phase 7: 偏好大调整 + 两轮评分策略（03-27，234 tests）
 
 ## 待完成
 
-- [x] 偏好大调整 — 用户不喜欢数据分析和量化研究，更想做 AI 产品方向 ✅（部分完成：配置已改、旧分已清、状态已重置；问卷 + 重新评分待用户交互完成）
+- [x] 跑评分并汇报结果 ✅
 
 ## Review 备注
 
-- role_fit 实现 ✅ 已 review：multiplier 方案合理，weak_match hard-cap 5.0，向后兼容，226 tests pass
-- 死数据字段（career_stage、previous_track、priorities、learning_goals）— 暂不处理
+- 两轮评分 ✅ 已 review：heuristic 粗筛 + refine API 精评，force_heuristic 参数设计合理，234 tests pass
+- 偏好调整 ✅ 已 review：配置已改、旧评分已清零、merge 保护 role_fit
+- 待用户操作：跑 `jobpilot score --heuristic` → `--refine 20` → `list --min-score 7`
 
 ## CLI 完成报告
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
 
-### 偏好大调整（2026-03-27）
+### 跑评分并汇报结果（2026-03-27）
 
-**改动文件**：
-- `data/resume_config.yaml` — preferences 调整：
-  - `career_track`: `["AI产品经理", "产品经理", "研究助理"]`（移除"数据分析"）
-  - `role_fit.strong_match`: `["AI产品", "产品经理", "产品实习", "研究助理", "产品策划"]`
-  - `role_fit.good_match`: `["运营分析", "AI应用", "项目管理", "内容运营"]`
-  - `role_fit.weak_match`: `["数据分析", "商业分析", "量化研究", ...]`（数据分析/量化研究从 strong → weak）
+**执行过程**：
+1. `score --heuristic --limit 200` — 173 个岗位秒评完成（~2 秒）
+2. `score --refine 20 --profile 10` — top 20 API 精评完成（~6.5 分钟）
+3. 查询结果：16 个岗位 >= 7.0
 
-**数据库操作**：
-- 清除全部 287 条旧评分（DELETE FROM job_scores）
-- 重置 173 条 scored → new 状态（UPDATE jobs SET status='new'）
+**精评 Top 16（score >= 7.0）**：
+| Score | Title | Company | City |
+|-------|-------|---------|------|
+| 8.5 | AI产品实习生 | SpatialWalk（中美双总部） | 深圳 |
+| 8.5 | AI产品经理-实习生 | 字节跳动 | 上海 |
+| 8.5 | 情感对话专家/NLP工程师 | 自然选择（深圳） | 深圳 |
+| 8.5 | AI平台产品开发工程师 | 港中深-人工智能与机器人研究院 | 深圳 |
+| 8.5 | AI产品经理 | 自然选择（深圳） | 深圳 |
+| 8.5 | AI金融数据产品经理 | 弘量科技 | 深圳 |
+| 8.5 | 产品经理实习生 | 智谱华章 | 北京 |
+| 8.5 | 人工智能产品经理实习生 | 腾讯 | 深圳 |
+| 8.5 | AI产品经理实习生 | 阿里云千问 | 北京/杭州 |
+| 8.5 | AI产品和数据分析专员 | 众生互联 | 北京 |
+| 8.5 | AI产品实习生 | 临港实验室 | 上海 |
+| 8.5 | AI数据产品经理 | Anker | 深圳 |
+| 8.5 | AI 产品经理 | 百秋尚美 | 上海 |
+| 8.5 | AI产品经理(大模型落地应用) | 智源研究院 | 北京 |
+| 7.5 | 大模型产品经理 | 上海人工智能实验室 | 上海 |
+| 7.5 | ai产品经理 | 智慧树 | 上海 |
 
-**待用户交互**：
-- `jobpilot setup` 需用户在终端交互填写（Bash tool 无法处理 stdin 交互）
-- `jobpilot score --limit 200` 重新评分（用户 setup 完成后执行）
-- `jobpilot list --min-score 7` 验证高分岗位方向
+**发现的问题**：
+- `list --min-score 7` 命令默认用 `profile_id=1`，但所有评分在 `profile_id=10`，导致结果为空
+- 需要给 `list` 命令加 `--profile` 参数或改默认值
+- 本次用 Python 直接查 `list_scores_with_jobs(profile_id=10)` 绕过
 
-**测试**：226 tests all pass（无代码改动，仅配置 + 数据变更）
-
-**注意事项**：
-- 问卷使用 merge 模式，只覆盖 `_QUESTIONNAIRE_KEYS`，不会丢失 role_fit
-- 评分清零后需要用户手动跑 score，因为 score 命令需要 API 或启发式打分
+**观察**：
+- 14/20 精评岗位得分 8.5，远高于启发式的 7.0-7.9 — API 评分更精准也更乐观
+- 深圳岗位占比高（8/16），上海 4 个，北京 4 个
+- 大部分是 AI 产品方向实习/全职，与偏好一致
 
 ## 架构约定（CLI 必须遵守）
 - frozen dataclass
