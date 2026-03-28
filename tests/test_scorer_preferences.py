@@ -419,3 +419,120 @@ class TestRoleFitInHeuristic:
         result = _heuristic_score(profile, job)
         # Should not be capped — a well-matched job can score > 5
         assert result.overall_score > 5.0
+
+
+# ------------------------------------------------------------------
+# job_type hard cap scoring
+# ------------------------------------------------------------------
+
+
+class TestJobTypeCapInHeuristic:
+    """Tests for job_type hard cap in _heuristic_score."""
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_intern_pref_fulltime_job_capped_at_3(self, mock_prefs, mock_config):
+        """When user prefers 实习 but job title has no intern keyword, cap at 3.0."""
+        mock_config.ANTHROPIC_API_KEY = ""
+        mock_prefs.return_value = {
+            **SAMPLE_PREFS,
+            "job_type": "实习",
+            "role_fit": SAMPLE_ROLE_FIT,
+        }
+        profile = _make_profile()
+        job = _make_job(
+            title="数据分析师",  # no 实习/intern
+            jd_text="技能要求：Python, SQL\n弹性工作",
+            city="上海",
+        )
+        result = _heuristic_score(profile, job)
+        assert result.overall_score <= 3.0
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_intern_pref_intern_job_not_capped(self, mock_prefs, mock_config):
+        """When user prefers 实习 and job title has 实习, no cap."""
+        mock_config.ANTHROPIC_API_KEY = ""
+        mock_prefs.return_value = {
+            **SAMPLE_PREFS,
+            "job_type": "实习",
+            "role_fit": SAMPLE_ROLE_FIT,
+        }
+        profile = _make_profile()
+        job = _make_job(
+            title="数据分析实习生",
+            jd_text="技能要求：Python, SQL\n弹性工作\n实习岗位",
+            city="上海",
+        )
+        result = _heuristic_score(profile, job)
+        assert result.overall_score > 3.0
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_intern_pref_intern_in_english_not_capped(self, mock_prefs, mock_config):
+        """Job title with 'intern' should not be capped."""
+        mock_config.ANTHROPIC_API_KEY = ""
+        mock_prefs.return_value = {
+            **SAMPLE_PREFS,
+            "job_type": "实习",
+        }
+        profile = _make_profile()
+        job = _make_job(
+            title="Data Analyst Intern",
+            jd_text="Skills: Python, SQL",
+            city="上海",
+        )
+        result = _heuristic_score(profile, job)
+        assert result.overall_score > 3.0
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_fulltime_pref_intern_job_capped(self, mock_prefs, mock_config):
+        """When user prefers 全职 but job is intern, cap at 3.0."""
+        mock_config.ANTHROPIC_API_KEY = ""
+        mock_prefs.return_value = {
+            **SAMPLE_PREFS,
+            "job_type": "全职",
+        }
+        profile = _make_profile()
+        job = _make_job(
+            title="数据分析实习生",
+            jd_text="技能要求：Python, SQL\n实习岗位",
+            city="上海",
+        )
+        result = _heuristic_score(profile, job)
+        assert result.overall_score <= 3.0
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_no_job_type_pref_no_cap(self, mock_prefs, mock_config):
+        """When job_type is not set, no cap applied."""
+        mock_config.ANTHROPIC_API_KEY = ""
+        mock_prefs.return_value = {**SAMPLE_PREFS}  # no job_type key
+        profile = _make_profile()
+        job = _make_job(
+            title="数据分析师",
+            jd_text="技能要求：Python, SQL\n弹性工作",
+            city="上海",
+        )
+        result = _heuristic_score(profile, job)
+        # No cap from job_type — score depends on other factors only
+        assert result.overall_score > 3.0
+
+    @patch("jobpilot.ai.scorer.config")
+    @patch("jobpilot.ai.scorer._load_preferences")
+    def test_cap_adds_concern_message(self, mock_prefs, mock_config):
+        """When capped, a concern about job_type mismatch should be added."""
+        mock_config.ANTHROPIC_API_KEY = ""
+        mock_prefs.return_value = {
+            **SAMPLE_PREFS,
+            "job_type": "实习",
+        }
+        profile = _make_profile()
+        job = _make_job(
+            title="数据分析师",  # no 实习/intern
+            jd_text="技能要求：Python, SQL",
+            city="上海",
+        )
+        result = _heuristic_score(profile, job)
+        assert any("工作类型" in c or "实习" in c for c in result.concerns)

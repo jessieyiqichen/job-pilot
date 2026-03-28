@@ -131,8 +131,9 @@ def search(
     from jobpilot.adapters.base import SearchFilters
     from jobpilot.adapters.boss import BossAdapter
     from jobpilot.adapters.websearch import WebSearchAdapter
+    from jobpilot.adapters.xhs_search import XHSSearchAdapter
 
-    adapters = {"boss": BossAdapter, "websearch": WebSearchAdapter}
+    adapters = {"boss": BossAdapter, "websearch": WebSearchAdapter, "xhs": XHSSearchAdapter}
     adapter_cls = adapters.get(platform)
     if not adapter_cls:
         console.print(f"[red]Unknown platform: {platform}. Available: {list(adapters.keys())}[/red]")
@@ -140,6 +141,18 @@ def search(
 
     adapter = adapter_cls()
     filters = SearchFilters(city=city, experience=experience, salary_range=salary)
+
+    # Auto-append job_type keyword if not already in query
+    from jobpilot.ai.scorer import _load_preferences
+
+    _prefs = _load_preferences()
+    _job_type = _prefs.get("job_type", "")
+    if _job_type:
+        _JT_KW_MAP = {"实习": "实习", "全职": "全职", "兼职/自由职业": "兼职"}
+        _kw = _JT_KW_MAP.get(_job_type, "")
+        if _kw and _kw not in query and "intern" not in query.lower():
+            query = f"{query} {_kw}"
+            console.print(f"[dim]自动追加关键词: {_kw}（偏好: {_job_type}）[/dim]")
 
     console.print(f"Searching '{query}' on {platform} (city={city})...")
     jobs = adapter.search(query, filters)

@@ -134,15 +134,31 @@ def score_job(profile: Profile, job: Job, *, force_heuristic: bool = False) -> J
     response_text = message.content[0].text.strip()
     result = _extract_json(response_text)
 
+    api_overall = float(result.get("overall_score", 5.0))
+    api_concerns = list(result.get("concerns", []))
+
+    # Apply job_type hard cap on API scores too
+    job_type_pref = preferences.get("job_type", "") if preferences else ""
+    if job_type_pref:
+        _jt_combined = job.title.lower() + " " + (job.jd_text or "").lower()
+        _is_intern_pref = job_type_pref == "实习"
+        _jd_is_intern = any(kw in _jt_combined for kw in ["实习", "intern"])
+        if _is_intern_pref and not _jd_is_intern:
+            api_overall = min(api_overall, 3.0)
+            api_concerns.append("工作类型不匹配: 期望实习，但岗位未标注实习")
+        elif not _is_intern_pref and _jd_is_intern:
+            api_overall = min(api_overall, 3.0)
+            api_concerns.append(f"工作类型不匹配: 期望{job_type_pref}，但岗位为实习")
+
     return JobScore(
         job_id=job.job_id,
         profile_id=profile.id or 1,
-        overall_score=float(result.get("overall_score", 5.0)),
+        overall_score=api_overall,
         skill_match=float(result.get("skill_match", 5.0)),
         experience_match=float(result.get("experience_match", 5.0)),
         salary_match=float(result.get("salary_match", 5.0)),
         highlights=result.get("highlights", []),
-        concerns=result.get("concerns", []),
+        concerns=api_concerns,
         suggestion=result.get("suggestion", ""),
         scored_at=now_iso(),
     )
@@ -892,6 +908,19 @@ def _heuristic_score(profile: Profile, job: Job) -> JobScore:
     if title_score < 5.0:
         concerns.append(title_explanation)
     concerns.extend(pref_negatives)
+
+    # Job type hard cap (mismatch → max 3.0)
+    job_type_pref = preferences.get("job_type", "") if preferences else ""
+    if job_type_pref:
+        _jt_combined = job.title.lower() + " " + (job.jd_text or "").lower()
+        _is_intern_pref = job_type_pref == "实习"
+        _jd_is_intern = any(kw in _jt_combined for kw in ["实习", "intern"])
+        if _is_intern_pref and not _jd_is_intern:
+            overall = min(overall, 3.0)
+            concerns.append("工作类型不匹配: 期望实习，但岗位未标注实习")
+        elif not _is_intern_pref and _jd_is_intern:
+            overall = min(overall, 3.0)
+            concerns.append(f"工作类型不匹配: 期望{job_type_pref}，但岗位为实习")
 
     # Build suggestion
     if overall >= 7.0:
