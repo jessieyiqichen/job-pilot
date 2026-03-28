@@ -45,6 +45,14 @@ WEBSEARCH_FALLBACK_THRESHOLD = int(os.environ.get("JOBPILOT_WEBSEARCH_THRESHOLD"
 BOSS_CLI_PATH: str = os.environ.get("BOSS_CLI_PATH", "boss")
 
 # ============================================================
+# rednote-mcp (小红书 MCP server)
+# ============================================================
+REDNOTE_MCP_PATH: str = os.environ.get(
+    "REDNOTE_MCP_PATH",
+    str(Path("~/.npm-global/lib/node_modules/rednote-mcp").expanduser()),
+)
+
+# ============================================================
 # AI Scoring
 # ============================================================
 # Minimum score to recommend (1-10)
