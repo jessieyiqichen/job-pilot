@@ -30,9 +30,11 @@ EXTRACTION_PROMPT = """\
 请在中国主流招聘网站（Boss直聘、拉勾、猎聘、智联招聘、公司官网等）搜索真实在招岗位。
 
 要求：
-1. 只返回真实存在的岗位，绝对不要捏造
-2. 每个岗位尽量包含完整信息
-3. 以 JSON 数组格式返回，每条包含以下字段：
+1. 只返回真实存在的、当前仍在招聘的岗位，绝对不要捏造
+2. 优先搜索近期（{year}年）发布的岗位，跳过明显过期的招聘信息
+3. 如果 JD 中写了截止日期且已过期，不要返回该岗位
+4. 每个岗位尽量包含完整信息
+5. 以 JSON 数组格式返回，每条包含以下字段：
    - company: 公司名称
    - title: 岗位名称
    - salary: 薪资范围（如 "15-25K"），不确定则留空字符串
@@ -119,7 +121,11 @@ class WebSearchAdapter(BaseAdapter):
         filters = filters or SearchFilters()
         city = filters.city or config.DEFAULT_CITY
 
-        prompt = EXTRACTION_PROMPT.format(query=query, city=city)
+        # Auto-append current year to reduce stale postings
+        year = str(datetime.now().year)
+        search_query = query if year in query else f"{query} {year}"
+
+        prompt = EXTRACTION_PROMPT.format(query=search_query, city=city, year=year)
 
         try:
             client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
