@@ -28,6 +28,10 @@ scripts/debug_*.js
 # Claude (personal CLAUDE.md has local paths; example is committed)
 CLAUDE.md
 
+# Node / Next.js
+node_modules/
+.next/
+
 # IDE
 .vscode/
 .idea/
