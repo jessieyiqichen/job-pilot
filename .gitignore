@@ -50,3 +50,7 @@ htmlcov/
 
 # Logs (scheduled run output)
 logs/
+
+# SQLite sidecar files for the demo snapshot
+web/demo-data/*.db-wal
+web/demo-data/*.db-shm
