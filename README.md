@@ -27,7 +27,7 @@ Highlights: [求职军师 Advisor](https://web-ten-omega-72.vercel.app/advisor) 
 - **Interview prep** — Likely questions per job mapped to STAR talking points grounded in your real resume
 - **Greeting messages** — Channel-specific opening messages (Boss / Xiaohongshu / email) from a configurable style guide; you send them yourself
 - **Writes in your voice** — `voice` stores samples of your real writing and few-shots them into greeting generation, so output sounds like you, not AI. Your rewrites are the best samples: feed back the version you actually sent (`--revised`) and it learns — fewer edits over time
-- **Job-hunt strategy companion (军师)** — `chat` is a multi-turn advisor with cross-session memory, grounded in your real data; it proactively follows up on commitments you voiced ("you said you'd apply to ByteDance — did you?"), auto-closing them once the job is applied. `advisor` diagnoses your funnel for weekly actions; `plan` builds this week's apply list (deterministic); `ask` answers one-off questions; `followup` tracks open commitments
+- **Job-hunt strategy companion (军师)** — `chat` is a multi-turn advisor with cross-session memory, grounded in your real data; it proactively follows up on commitments you voiced ("you said you'd apply to ByteDance — did you?"), auto-closing them once the job is applied. `advisor` diagnoses your funnel for weekly actions; `plan` builds this week's apply list (deterministic); `ask` answers one-off questions; `followup` tracks open commitments; `research` fetches interview questions / 面经 / relevant posts from Xiaohongshu + web on demand
 - **Cognitive grounding (optional)** — When a Nous cognitive model (a sibling cognitive-modeling project) is present, the advisor grounds its guidance in *how you actually decide* (decision architecture, blind spots, value hierarchy), not just job data — e.g. reframing "0 applications despite 19 tailored resumes" as a high-standards blind spot rather than nagging you to "just apply". Degrades gracefully when absent.
 - **Eval-driven scoring** — `label` + `eval` measure agreement (precision/recall/F1) between AI scores and your own apply/skip decisions
 - **Web dashboard** — Next.js board: job cards, funnel chart, score distribution, and an advisor page
@@ -118,6 +118,7 @@ jobpilot apply                         # 5. mark applied (human-in-the-loop)
 | `chat [--job <id>] [--new]` | Real-time multi-turn advisor with cross-session memory + proactive follow-up |
 | `plan [--target N]` | This week's apply list (deterministic) + follow-up reminders |
 | `followup [--done <id>] [--drop <id>]` | Track commitments voiced in chat; auto-closes once a job is applied |
+| `research "<query>" [--channel xhs\|web\|both]` | On-demand material lookup — pulls interview questions / 面经 / relevant posts from Xiaohongshu + web (read-only, not written to the job DB) |
 | `voice "<text>" [--revised] [--list]` | Store samples of your real writing so greetings sound like you |
 | `import-xhs <json> [--score]` | Import Xiaohongshu favorites |
 | `apply` | Interactive batch apply |

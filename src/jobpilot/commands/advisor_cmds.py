@@ -155,6 +155,50 @@ def ask(
 
 
 @app.command()
+def research(
+    query: str = typer.Argument(..., help="要查的资料，如 'AI产品实习面试题'"),
+    channel: str = typer.Option("both", "--channel", "-c", help="xhs | web | both"),
+    limit: int = typer.Option(12, "--limit", "-l", help="小红书抓取笔记数"),
+    output: str = typer.Option("", "--output", "-o", help="保存到 Markdown 文件"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """军师查资料：按需去小红书 / web 搜面试题、面经、相关帖子（不写进岗位库）。"""
+    _setup_logging(verbose)
+    from jobpilot.research import research as do_research
+
+    if channel not in ("xhs", "web", "both"):
+        console.print(f"[red]未知渠道: {channel}。可选: xhs | web | both[/red]")
+        raise typer.Exit(1)
+
+    if channel in ("web", "both") and not cli.config.ANTHROPIC_API_KEY:
+        console.print("[yellow]未配置 API key，web 检索跳过（仅小红书可用）。[/yellow]")
+
+    console.print(f"军师查资料: '{query}' (渠道={channel})...")
+    results = do_research(query, channel=channel, limit=limit)
+    if not results:
+        console.print("[yellow]没查到相关资料。换个关键词，或确认 rednote-mcp 已登录。[/yellow]")
+        raise typer.Exit(0)
+
+    lines: list[str] = [f"# 资料检索: {query}\n"]
+    for i, r in enumerate(results, 1):
+        tag = "小红书" if r.source == "xhs" else "web"
+        author = f" · {r.author}" if r.author else ""
+        lines.append(f"## {i}. [{tag}] {r.title}{author}")
+        if r.summary:
+            lines.append(r.summary)
+        if r.url:
+            lines.append(f"链接: {r.url}")
+        lines.append("")
+
+    md = "\n".join(lines)
+    console.print(md)
+    console.print(f"[green]共 {len(results)} 条资料。[/green]")
+    if output:
+        Path(output).expanduser().write_text(md, encoding="utf-8")
+        console.print(f"[green]已保存: {output}[/green]")
+
+
+@app.command()
 def followup(
     profile_id: int = typer.Option(config.DEFAULT_PROFILE_ID, "--profile", "-p", help="Profile ID"),
     done: str = typer.Option("", "--done", help="标记某条承诺为完成（传列表里的 id）"),

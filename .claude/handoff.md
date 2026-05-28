@@ -478,6 +478,19 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 **账号说明**：cookies 文件 `~/.mcp/rednote/cookies.json` 最后修改 2026-03-27，user ID `6410425e`。无法通过 MCP 程序化确认账号名（无 get_profile 工具），用户需自行确认是否为招工专用账号。
 
+## ✅ 军师资料检索 research（2026-05-28）
+
+**需求**：用户拍板要"军师能按需去小红书 / web 搜面试题、面经、相关帖子"（覆盖了 me.md 里"暂不堆功能"——这是用户显式决定）。
+
+**改动**：
+- 新增 `src/jobpilot/research.py`：`ResearchResult`(frozen) + `research_xhs` / `research_web` / `research` dispatch + `_distill_notes_via_ai`。复用 xhs_search 的 `call_mcp_search` / `_parse_notes_text` / `_extract_json_from_text`，换成"提炼面试题/资料"的 prompt（不写 jobs 表）。
+- 新增 CLI `jobpilot research "<query>" [--channel xhs|web|both] [--limit N] [-o file]`（在 commands/advisor_cmds.py，归军师命令组）。
+- 降级：无 API key → web 跳过、xhs 返回未提炼的原始笔记；MCP 缺失/超时/出错 → 优雅返回 []。
+- 测试：`tests/test_research.py`(18) + `tests/test_cli_research.py`(5)。全量 **472→495 tests 全过**。
+- README：命令表 + 军师段落同步。
+
+**未做（下一步可选）**：把 research 接进 chat 的 tool-use，让军师在多轮对话里自己触发搜索（现在是独立命令，用户主动跑）。未真机跑过（需 rednote-mcp 登录）。
+
 ## 架构约定（CLI 必须遵守）
 - frozen dataclass
 - connection-per-call SQLite
