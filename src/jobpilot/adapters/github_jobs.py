@@ -64,6 +64,14 @@ JOB_EXTRACTION_PROMPT = """\
 # let downstream scoring (job_type/city preferences) do the filtering instead.
 _NARROWING_TOKENS = {"实习", "全职", "兼职", "intern", "internship"}
 
+# Curated "mega-thread" hiring repos: one recurring issue whose COMMENTS are the
+# actual postings (generic issue search can't see comment bodies). (repo, search_term).
+DEFAULT_MEGA_THREADS: tuple[tuple[str, str], ...] = (
+    ("ruanyf/weekly", "谁在招人"),
+)
+# Cap comments pulled per thread to bound prompt size / token cost.
+MAX_THREAD_COMMENTS = 30
+
 
 def broaden_query(query: str) -> str:
     """Drop job-type tokens so the GitHub AND-search isn't over-constrained."""
@@ -97,6 +105,58 @@ def call_gh_search(query: str, limit: int = 30, timeout: int = 60) -> list[dict]
     except json.JSONDecodeError:
         logger.warning("gh search returned non-JSON output")
         return []
+
+
+def _latest_thread_number(repo: str, term: str, timeout: int = 60) -> int | None:
+    """Find the most recent issue number matching `term` in `repo` (e.g. 谁在招人)."""
+    cmd = [
+        "gh", "search", "issues", term, "--repo", repo,
+        "--match", "title",  # match the monthly thread title, not issues merely mentioning it
+        "--sort", "created", "--limit", "1", "--json", "number",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        data = json.loads(result.stdout)
+        return data[0]["number"] if data else None
+    except (json.JSONDecodeError, KeyError, IndexError):
+        return None
+
+
+def call_gh_issue_comments(
+    repo: str, number: int, limit: int = MAX_THREAD_COMMENTS, timeout: int = 60
+) -> list[str]:
+    """Fetch comment bodies of an issue via the GitHub API (gh api). One page (<=100)."""
+    cmd = ["gh", "api", f"repos/{repo}/issues/{number}/comments?per_page=100"]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    try:
+        comments = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+    bodies = [c.get("body", "") for c in comments if isinstance(c, dict) and c.get("body")]
+    return bodies[:limit]
+
+
+def _gather_thread_posts(threads: tuple[tuple[str, str], ...]) -> list[dict]:
+    """Pull the latest mega-thread's comments as unified post dicts."""
+    posts: list[dict] = []
+    for repo, term in threads:
+        try:
+            number = _latest_thread_number(repo, term)
+            if not number:
+                continue
+            url = f"https://github.com/{repo}/issues/{number}"
+            for body in call_gh_issue_comments(repo, number):
+                posts.append(
+                    {"title": "", "body": body, "url": url,
+                     "repository": {"nameWithOwner": repo}}
+                )
+        except (FileNotFoundError, RuntimeError, subprocess.TimeoutExpired) as e:
+            logger.warning("mega-thread %s failed: %s", repo, e)
+    return posts
 
 
 def _format_issues(issues: list[dict]) -> str:
@@ -203,14 +263,21 @@ class GitHubAdapter(BaseAdapter):
             return []
         except (RuntimeError, subprocess.TimeoutExpired) as e:
             logger.error("GitHub search failed: %s", e)
+            issues = []
+
+        # Mega-thread comments (where the actual postings live, e.g. 谁在招人)
+        thread_posts = _gather_thread_posts(DEFAULT_MEGA_THREADS)
+        posts = list(issues) + thread_posts
+
+        if not posts:
+            logger.warning("GitHub search + threads returned nothing")
             return []
 
-        if not issues:
-            logger.warning("GitHub search returned no issues")
-            return []
-
-        logger.info("Got %d issues; extracting jobs via AI", len(issues))
-        job_dicts = _extract_jobs_via_ai(issues, query)
+        logger.info(
+            "Got %d issues + %d thread comments; extracting via AI",
+            len(issues), len(thread_posts),
+        )
+        job_dicts = _extract_jobs_via_ai(posts, query)
         return _parse_github_jobs(job_dicts)
 
     def get_job_detail(self, job_id: str) -> Job | None:

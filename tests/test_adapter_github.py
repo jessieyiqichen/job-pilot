@@ -56,9 +56,10 @@ def test_platform_name():
     assert GitHubAdapter().platform_name == "github"
 
 
+@patch("jobpilot.adapters.github_jobs._gather_thread_posts", return_value=[])
 @patch("jobpilot.adapters.github_jobs._extract_jobs_via_ai")
 @patch("jobpilot.adapters.github_jobs.call_gh_search")
-def test_search_happy_path(mock_gh, mock_ai):
+def test_search_happy_path(mock_gh, mock_ai, mock_threads):
     mock_gh.return_value = [{"title": "招聘", "body": "...", "url": "u", "repository": {}}]
     mock_ai.return_value = [
         {"company": "MiniMax", "title": "AI产品经理实习", "source_url": "u"}
@@ -73,15 +74,55 @@ def test_search_happy_path(mock_gh, mock_ai):
     assert "实习" not in sent
 
 
+@patch("jobpilot.adapters.github_jobs._gather_thread_posts", return_value=[])
 @patch("jobpilot.adapters.github_jobs.call_gh_search")
-def test_search_no_issues_returns_empty(mock_gh):
+def test_search_no_posts_returns_empty(mock_gh, mock_threads):
     mock_gh.return_value = []
     assert GitHubAdapter().search("AI产品") == []
 
 
+@patch("jobpilot.adapters.github_jobs._gather_thread_posts", return_value=[])
+@patch("jobpilot.adapters.github_jobs._extract_jobs_via_ai")
 @patch("jobpilot.adapters.github_jobs.call_gh_search", side_effect=FileNotFoundError("no gh"))
-def test_search_handles_missing_gh(mock_gh):
+def test_search_handles_missing_gh(mock_gh, mock_ai, mock_threads):
+    # gh missing → generic search returns [], no thread posts → empty, no AI call
     assert GitHubAdapter().search("AI产品") == []
+
+
+@patch("jobpilot.adapters.github_jobs._extract_jobs_via_ai")
+@patch("jobpilot.adapters.github_jobs.call_gh_issue_comments")
+@patch("jobpilot.adapters.github_jobs._latest_thread_number")
+@patch("jobpilot.adapters.github_jobs.call_gh_search")
+def test_search_includes_thread_comments(mock_gh, mock_num, mock_comments, mock_ai):
+    mock_gh.return_value = []  # generic search empty
+    mock_num.return_value = 9815
+    mock_comments.return_value = ["公司A 招产品实习", "公司B 招后端"]
+    mock_ai.return_value = [{"company": "公司A", "title": "产品实习", "source_url": "u"}]
+
+    jobs = GitHubAdapter().search("AI产品")
+    assert len(jobs) == 1
+    # the AI extractor received the thread comments as posts
+    posts = mock_ai.call_args[0][0]
+    assert any("公司A" in p["body"] for p in posts)
+
+
+@patch("jobpilot.adapters.github_jobs.subprocess.run")
+def test_call_gh_issue_comments_parses_bodies(mock_run):
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps([{"body": "招聘帖1"}, {"body": "招聘帖2"}, {"nope": 1}]),
+    )
+    from jobpilot.adapters.github_jobs import call_gh_issue_comments
+
+    assert call_gh_issue_comments("ruanyf/weekly", 9815) == ["招聘帖1", "招聘帖2"]
+
+
+@patch("jobpilot.adapters.github_jobs.subprocess.run")
+def test_latest_thread_number(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps([{"number": 9815}]))
+    from jobpilot.adapters.github_jobs import _latest_thread_number
+
+    assert _latest_thread_number("ruanyf/weekly", "谁在招人") == 9815
 
 
 @patch("jobpilot.adapters.github_jobs.subprocess.run")

@@ -33,7 +33,8 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 20: 个人风格打招呼话术重写（固定自我介绍模板 from resume_config + LLM 只生成钩子 + 风格自检）+ 修复 .env 自动加载导致测试打真实 API 的隔离 bug（conftest 强制 key 空，73s→1.7s）（05-28，350 tests）
 - Phase 21: greeting 接入 pipeline-all（第 5 个 stage _greeting_stage，对 top N 高分岗生成话术存 data/greetings/，--greeting N 控制，缺模板优雅跳过）（05-28，353 tests）
 - Phase 22: greeting 渠道差异化 + 可配置 style guide（boss短+截图配文/xhs自然/email正式带主题+签名；formality 正式度校准；interaction_rules HR互动规则；全在 resume_config.yaml greeting 段，改偏好只动配置）（05-28，354 tests）
-- Phase 23: GitHub 招聘渠道适配器（adapters/github_jobs.py，gh search issues 官方API+AI抽取，合规不爬；接入 search/pipeline；broaden_query 去 job-type/城市词防 AND 过窄）（05-28，362 tests）。⚠️ 通用 issue 搜索低产（实测净抓 1 条）——ruanyf/weekly 岗位在评论里搜不到；提产需做评论抽取（用户已 defer）
+- Phase 23: GitHub 招聘渠道适配器（adapters/github_jobs.py，gh search issues 官方API+AI抽取，合规不爬；接入 search/pipeline；broaden_query 去 job-type/城市词防 AND 过窄）（05-28，362 tests）
+- Phase 23.5: GitHub 评论抽取（拉 ruanyf/weekly 最新「谁在招人」帖评论一起抽，岗位都在评论里；_latest_thread_number 用 --match title 只匹配月度帖标题避免抓到自荐帖；call_gh_issue_comments via gh api；MAX_THREAD_COMMENTS=30）。机制验证：评论 0→14 条流入 AI；产出随当月帖内容（5月帖多非产品岗被过滤，净增0）（05-28，github 11 tests）
 - Phase 24: 策略诊断军师 advisor（advisor.py：诊断层 diagnose 确定性算 6 信号[漏斗/高分岗缺口/停滞/定制覆盖/投递节奏/数据量门槛]+建议层 generate_advice LLM 翻人话，无 key 降级导出 prompt；诚实护栏：投递<ADVISOR_MIN_APPLICATIONS(5) 时改口"先投起来"不硬编转化分析）+ jobpilot advisor 命令 + db.count_jobs_by_status（05-28，378 tests）
 
 ## 关键数据
