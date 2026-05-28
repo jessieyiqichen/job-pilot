@@ -31,6 +31,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 18.5: API key 配好(.env 自动加载) + 真跑 interview 修 max_tokens 截断 bug + demo 用真实生成内容（05-28，334 tests）
 - Phase 19: 借鉴对标项目（get_jobs/boss-agent-cli）→ 打招呼语生成器 + 黑名单/猎头过滤 + GitHub Actions CI + 合规边界声明（05-28，346 tests，覆盖率 77%）
 - Phase 20: 个人风格打招呼话术重写（固定自我介绍模板 from resume_config + LLM 只生成钩子 + 风格自检）+ 修复 .env 自动加载导致测试打真实 API 的隔离 bug（conftest 强制 key 空，73s→1.7s）（05-28，350 tests）
+- Phase 21: greeting 接入 pipeline-all（第 5 个 stage _greeting_stage，对 top N 高分岗生成话术存 data/greetings/，--greeting N 控制，缺模板优雅跳过）（05-28，353 tests）
 
 ## 关键数据
 

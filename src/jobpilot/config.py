@@ -31,9 +31,10 @@ DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "jobpilot.db"
 RESUMES_DIR = DATA_DIR / "resumes"
 TAILORED_DIR = DATA_DIR / "tailored"
+GREETINGS_DIR = DATA_DIR / "greetings"
 
 # Ensure directories exist
-for _d in (DATA_DIR, RESUMES_DIR, TAILORED_DIR):
+for _d in (DATA_DIR, RESUMES_DIR, TAILORED_DIR, GREETINGS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ============================================================

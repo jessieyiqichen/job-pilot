@@ -763,6 +763,7 @@ def pipeline_all(
     profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
     refine_top: int = typer.Option(20, "--refine", "-r", help="API 精评 top N（0=跳过）"),
     tailor_top: int = typer.Option(5, "--tailor", "-t", help="自动定制 top N 简历（0=跳过）"),
+    greeting_top: int = typer.Option(5, "--greeting", "-g", help="生成 top N 打招呼话术（0=跳过）"),
     email: bool = typer.Option(False, "--email", help="跑完把 digest 发邮件（需配置 SMTP）"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
@@ -783,6 +784,7 @@ def pipeline_all(
         profile_id=profile_id,
         refine_top=refine_top,
         tailor_top=tailor_top,
+        greeting_top=greeting_top,
     )
 
     console.print(
@@ -800,7 +802,7 @@ def pipeline_all(
 
     console.print(
         f"\n[bold]汇总[/bold]  入库 {result.found} · 秒评 {result.scored} · "
-        f"精评 {result.refined} · 定制 {result.tailored} 份简历"
+        f"精评 {result.refined} · 定制 {result.tailored} 份简历 · 打招呼 {result.greeted} 条"
     )
     if result.report_path:
         console.print(f"[green]日报: {result.report_path}[/green]")

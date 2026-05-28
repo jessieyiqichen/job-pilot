@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_PLATFORMS: tuple[str, ...] = ("websearch", "xhs")
 DEFAULT_REFINE_TOP = 20
 DEFAULT_TAILOR_TOP = 5
+DEFAULT_GREETING_TOP = 5
 DEFAULT_PROFILE_ID = 10
 _FALLBACK_KEYWORD = "AI产品经理"
 
@@ -37,6 +38,7 @@ class PipelineConfig:
     profile_id: int = DEFAULT_PROFILE_ID
     refine_top: int = DEFAULT_REFINE_TOP
     tailor_top: int = DEFAULT_TAILOR_TOP
+    greeting_top: int = DEFAULT_GREETING_TOP
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,7 @@ class PipelineResult:
     scored: int = 0
     refined: int = 0
     tailored: int = 0
+    greeted: int = 0
     report_path: str | None = None
 
 
@@ -85,6 +88,7 @@ def build_config(
     profile_id: int = DEFAULT_PROFILE_ID,
     refine_top: int = DEFAULT_REFINE_TOP,
     tailor_top: int = DEFAULT_TAILOR_TOP,
+    greeting_top: int = DEFAULT_GREETING_TOP,
 ) -> PipelineConfig:
     """Build a PipelineConfig from preferences plus optional overrides."""
     kw = tuple(keywords) if keywords else default_keywords(prefs)
@@ -95,6 +99,7 @@ def build_config(
         profile_id=profile_id,
         refine_top=refine_top,
         tailor_top=tailor_top,
+        greeting_top=greeting_top,
     )
 
 
@@ -204,6 +209,52 @@ def _tailor_stage(db: JobPilotDB, cfg: PipelineConfig) -> tuple[StageResult, int
     return StageResult("定制简历", ok, detail), success
 
 
+def _greeting_filename(company: str, title: str) -> str:
+    safe_company = (company or "公司").replace("/", "_")[:20]
+    safe_title = (title or "岗位").replace("/", "_")[:30]
+    return f"{safe_company}_{safe_title}.txt"
+
+
+def _greeting_stage(db: JobPilotDB, cfg: PipelineConfig) -> tuple[StageResult, int]:
+    """Generate personal-style greetings for top N high-score jobs, saved to files."""
+    if cfg.greeting_top <= 0:
+        return StageResult("打招呼话术", True, "已跳过 (greeting_top=0)"), 0
+
+    from jobpilot.ai.greeting import GreetingError, _load_greeting_config, generate_greeting
+
+    if not _load_greeting_config().get("base_template"):
+        return StageResult("打招呼话术", True, "未配置 greeting 模板，已跳过"), 0
+
+    pairs = db.list_top_scored_jobs(
+        profile_id=cfg.profile_id,
+        min_score=config.MIN_RECOMMEND_SCORE,
+        statuses=("scored", "tailored"),
+        limit=cfg.greeting_top,
+    )
+    if not pairs:
+        return StageResult("打招呼话术", True, "没有高分岗位"), 0
+
+    success = 0
+    errors: list[str] = []
+    for score_obj, job in pairs:
+        try:
+            text = generate_greeting(job, score_obj)
+            path = config.GREETINGS_DIR / _greeting_filename(job.company, job.title)
+            path.write_text(text, encoding="utf-8")
+            success += 1
+        except GreetingError as exc:
+            errors.append(f"{job.company}:{exc}")
+        except Exception as exc:  # noqa: BLE001 - isolate per-job failure
+            logger.exception("greeting failed for %s", job.job_id)
+            errors.append(f"{job.company}:{exc}")
+
+    ok = not errors
+    detail = f"生成 {success}/{len(pairs)} 条打招呼话术 → {config.GREETINGS_DIR}"
+    if errors:
+        detail += "；失败: " + "; ".join(errors)
+    return StageResult("打招呼话术", ok, detail), success
+
+
 def _report_stage(db: JobPilotDB, cfg: PipelineConfig) -> tuple[StageResult, str | None]:
     """Generate and persist the daily report. Returns (result, path)."""
     from jobpilot.report import save_report
@@ -239,10 +290,10 @@ def run_pipeline(
             progress(msg)
 
     stages: list[StageResult] = []
-    found = scored = refined = tailored = 0
+    found = scored = refined = tailored = greeted = 0
     report_path: str | None = None
 
-    emit("[1/4] 搜索岗位 (WebSearch + 小红书)…")
+    emit("[1/5] 搜索岗位 (WebSearch + 小红书)…")
     try:
         result, found = _search_stage(db, cfg)
     except Exception as exc:  # noqa: BLE001
@@ -250,7 +301,7 @@ def run_pipeline(
         result = StageResult("搜索", False, f"阶段异常: {exc}")
     stages.append(result)
 
-    emit("[2/4] AI 打分 (启发式 + API 精评)…")
+    emit("[2/5] AI 打分 (启发式 + API 精评)…")
     try:
         result, scored, refined = _score_stage(db, cfg)
     except Exception as exc:  # noqa: BLE001
@@ -258,7 +309,7 @@ def run_pipeline(
         result = StageResult("打分", False, f"阶段异常: {exc}")
     stages.append(result)
 
-    emit("[3/4] 定制 top 简历…")
+    emit("[3/5] 定制 top 简历…")
     try:
         result, tailored = _tailor_stage(db, cfg)
     except Exception as exc:  # noqa: BLE001
@@ -266,7 +317,15 @@ def run_pipeline(
         result = StageResult("定制简历", False, f"阶段异常: {exc}")
     stages.append(result)
 
-    emit("[4/4] 生成日报…")
+    emit("[4/5] 生成 top 打招呼话术…")
+    try:
+        result, greeted = _greeting_stage(db, cfg)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("greeting stage crashed")
+        result = StageResult("打招呼话术", False, f"阶段异常: {exc}")
+    stages.append(result)
+
+    emit("[5/5] 生成日报…")
     try:
         result, report_path = _report_stage(db, cfg)
     except Exception as exc:  # noqa: BLE001
@@ -280,5 +339,6 @@ def run_pipeline(
         scored=scored,
         refined=refined,
         tailored=tailored,
+        greeted=greeted,
         report_path=report_path,
     )

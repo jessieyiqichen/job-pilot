@@ -208,6 +208,52 @@ def test_tailor_stage_skipped_when_zero():
 
 
 # ----------------------------------------------------------------------
+# greeting stage
+# ----------------------------------------------------------------------
+
+
+def test_greeting_stage_skipped_when_zero():
+    db = MagicMock()
+    cfg = PipelineConfig(keywords=("kw",), greeting_top=0)
+    result, count = pipeline._greeting_stage(db, cfg)
+    assert result.ok is True
+    assert count == 0
+    db.list_top_scored_jobs.assert_not_called()
+
+
+@patch("jobpilot.ai.greeting._load_greeting_config")
+def test_greeting_stage_skips_when_no_template(mock_cfg):
+    mock_cfg.return_value = {}  # no base_template
+    db = MagicMock()
+    cfg = PipelineConfig(keywords=("kw",), greeting_top=5)
+    result, count = pipeline._greeting_stage(db, cfg)
+    assert result.ok is True
+    assert count == 0
+    assert "未配置" in result.detail
+    db.list_top_scored_jobs.assert_not_called()
+
+
+@patch("jobpilot.ai.greeting.generate_greeting")
+@patch("jobpilot.ai.greeting._load_greeting_config")
+def test_greeting_stage_writes_files(mock_cfg, mock_gen, tmp_path):
+    mock_cfg.return_value = {"base_template": "intro {hook} end"}
+    mock_gen.return_value = "您好，这是一条打招呼话术"
+    job = MagicMock(job_id="j1", company="字节", title="AI产品")
+    db = MagicMock()
+    db.list_top_scored_jobs.return_value = [(MagicMock(), job)]
+
+    cfg = PipelineConfig(keywords=("kw",), greeting_top=5)
+    with patch.object(pipeline.config, "GREETINGS_DIR", tmp_path):
+        result, count = pipeline._greeting_stage(db, cfg)
+
+    assert result.ok is True
+    assert count == 1
+    written = list(tmp_path.glob("*.txt"))
+    assert len(written) == 1
+    assert "打招呼话术" in written[0].read_text(encoding="utf-8")
+
+
+# ----------------------------------------------------------------------
 # orchestrator
 # ----------------------------------------------------------------------
 
@@ -225,17 +271,19 @@ def test_run_pipeline_runs_all_stages_in_order():
         patch.object(pipeline, "_search_stage", return_value=(_stub_stage("搜索"), 5)) as s,
         patch.object(pipeline, "_score_stage", return_value=(_stub_stage("打分"), 5, 2)),
         patch.object(pipeline, "_tailor_stage", return_value=(_stub_stage("定制简历"), 3)),
+        patch.object(pipeline, "_greeting_stage", return_value=(_stub_stage("打招呼话术"), 4)),
         patch.object(pipeline, "_report_stage", return_value=(_stub_stage("日报"), "/tmp/r.md")),
     ):
         result = run_pipeline(db, cfg, progress=calls.append)
 
-    assert [st.name for st in result.stages] == ["搜索", "打分", "定制简历", "日报"]
+    assert [st.name for st in result.stages] == ["搜索", "打分", "定制简历", "打招呼话术", "日报"]
     assert result.found == 5
     assert result.scored == 5
     assert result.refined == 2
     assert result.tailored == 3
+    assert result.greeted == 4
     assert result.report_path == "/tmp/r.md"
-    assert len(calls) == 4  # one progress message per stage
+    assert len(calls) == 5  # one progress message per stage
 
 
 def test_run_pipeline_isolates_stage_crash():
@@ -247,6 +295,7 @@ def test_run_pipeline_isolates_stage_crash():
         patch.object(pipeline, "_search_stage", side_effect=RuntimeError("boom")),
         patch.object(pipeline, "_score_stage", return_value=(_stub_stage("打分"), 4, 0)),
         patch.object(pipeline, "_tailor_stage", return_value=(_stub_stage("定制简历"), 1)),
+        patch.object(pipeline, "_greeting_stage", return_value=(_stub_stage("打招呼话术"), 2)),
         patch.object(pipeline, "_report_stage", return_value=(_stub_stage("日报"), "/tmp/r.md")),
     ):
         result = run_pipeline(db, cfg)
