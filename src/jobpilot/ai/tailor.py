@@ -200,7 +200,7 @@ takes more than one breath to read out loud, it's too long. Shorten it.
 ## CANDIDATE'S VERIFIED SKILLS (do NOT add skills beyond this list)
 {skills_text}
 
-## TARGET JOB
+{projects_section}## TARGET JOB
 - Title: {job_title}
 - Company: {company}
 - Job Description:
@@ -272,6 +272,33 @@ def _format_skills_text(skills_config: dict, profile: Profile) -> str:
     return ""
 
 
+def _format_projects_text(skills_config: dict) -> str:
+    """Format additional projects from resume_config.yaml for the prompt."""
+    projects = skills_config.get("projects", [])
+    if not projects:
+        return ""
+    # Sort by priority (lower = higher priority)
+    projects = sorted(projects, key=lambda p: p.get("priority", 99))
+    lines = [
+        "## ADDITIONAL PROJECT EXPERIENCE (use these in the PROJECTS section)",
+        "The candidate built these independent projects. Include them in the "
+        "resume's PROJECTS section, ordered by relevance to the target job. "
+        "If space is limited, prioritize by the order listed below.",
+        "",
+    ]
+    for p in projects:
+        name = p.get("name", "")
+        role = p.get("role", "")
+        dates = p.get("dates", "")
+        tech = p.get("tech", "")
+        desc = p.get("description", "")
+        lines.append(f"### {name}")
+        lines.append(f"Role: {role} | Dates: {dates} | Tech: {tech}")
+        lines.append(desc)
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 # ---------------------------------------------------------------------------
 # Core API
 # ---------------------------------------------------------------------------
@@ -288,11 +315,13 @@ def tailor_resume(profile: Profile, job: Job) -> str:
     skills_config = _load_skills_config()
     skills_text = _format_skills_text(skills_config, profile)
     contact_info = _format_contact_info(skills_config)
+    projects_section = _format_projects_text(skills_config)
 
     prompt = TAILOR_PROMPT.format(
         resume_text=profile.raw_text,
         skills_text=skills_text,
         contact_info=contact_info,
+        projects_section=projects_section,
         job_title=job.title,
         company=job.company,
         jd_text=job.jd_text,
@@ -469,11 +498,13 @@ def _basic_tailor(profile: Profile, job: Job) -> str:
     skills_config = _load_skills_config()
     skills_text = _format_skills_text(skills_config, profile)
     contact_info = _format_contact_info(skills_config)
+    projects_section = _format_projects_text(skills_config)
 
     prompt = TAILOR_PROMPT.format(
         resume_text=profile.raw_text,
         skills_text=skills_text,
         contact_info=contact_info,
+        projects_section=projects_section,
         job_title=job.title,
         company=job.company,
         jd_text=job.jd_text,
