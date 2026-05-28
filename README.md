@@ -12,7 +12,9 @@ AI-powered job hunting assistant for Chinese recruitment platforms.
 
 Not a scraper — an intelligent layer on top of existing tools: AI matching, resume tailoring, application tracking, and a one-command automation pipeline, with a Next.js dashboard.
 
-**Live demo (read-only snapshot):** https://web-ten-omega-72.vercel.app
+**Live demo (read-only snapshot):** https://web-ten-omega-72.vercel.app　·　[Advisor page](https://web-ten-omega-72.vercel.app/advisor)　·　[Product thinking](https://web-ten-omega-72.vercel.app/product-thinking)
+
+**Product case study:** [docs/CASE_STUDY.md](docs/CASE_STUDY.md) — the problem, the behavior-layer → cognitive-layer insight, and the key product trade-offs behind it.
 
 ## What it does
 
