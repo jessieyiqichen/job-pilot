@@ -189,6 +189,55 @@ def generate_daily_report(db: JobPilotDB, profile_id: int = config.DEFAULT_PROFI
     return "\n".join(sections)
 
 
+def generate_digest(
+    db: JobPilotDB, profile_id: int = config.DEFAULT_PROFILE_ID
+) -> tuple[str, str]:
+    """Build a concise daily digest for email: new high-score jobs + follow-ups.
+
+    Returns (subject, body). Designed for the scheduled run — short and
+    actionable, unlike the full Markdown report.
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    new_high = find_new_high_score_jobs(
+        db,
+        profile_id=profile_id,
+        min_score=config.MIN_RECOMMEND_SCORE,
+        lookback_days=config.NEW_JOB_LOOKBACK_DAYS,
+    )
+    stale = find_stale_applications(db, stale_days=config.FOLLOWUP_STALE_DAYS)
+
+    subject = f"JobPilot 日报 {today} — {len(new_high)} 个新高分岗"
+
+    lines: list[str] = [f"JobPilot 日报 — {today}", ""]
+
+    if new_high:
+        lines.append(f"🆕 新增高分岗位（近 {config.NEW_JOB_LOOKBACK_DAYS} 天，{len(new_high)} 个）")
+        for score, job in new_high:
+            salary = (
+                f"{job.salary_min // 1000}-{job.salary_max // 1000}K"
+                if job.salary_max
+                else "面议"
+            )
+            lines.append(
+                f"  [{score.overall_score:.1f}] {job.title} @ {job.company} "
+                f"（{job.city}, {salary}）"
+            )
+    else:
+        lines.append("🆕 近期无新增高分岗位。")
+    lines.append("")
+
+    if stale:
+        lines.append(f"⏰ 待跟进投递（>= {config.FOLLOWUP_STALE_DAYS} 天无回复，{len(stale)} 个）")
+        for app in stale:
+            job = db.get_job(app.job_id)
+            title = job.title if job else app.job_id
+            lines.append(f"  {title}（投于 {app.applied_at or app.updated_at}）")
+        lines.append("")
+
+    lines.append("—— 下一步：jobpilot list --min-score 7 查看，jobpilot apply 投递")
+    return subject, "\n".join(lines)
+
+
 def save_report(
     db: JobPilotDB,
     output_path: str | None = None,

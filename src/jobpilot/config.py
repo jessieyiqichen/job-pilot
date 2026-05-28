@@ -69,6 +69,17 @@ NEW_JOB_LOOKBACK_DAYS: int = int(os.environ.get("JOBPILOT_NEW_JOB_LOOKBACK_DAYS"
 FOLLOWUP_STALE_DAYS: int = int(os.environ.get("JOBPILOT_FOLLOWUP_STALE_DAYS", "7"))
 
 # ============================================================
+# Email delivery (SMTP) — secrets come from env / .env, never committed
+# ============================================================
+SMTP_HOST: str = os.environ.get("JOBPILOT_SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT: int = int(os.environ.get("JOBPILOT_SMTP_PORT", "587"))
+SMTP_USER: str = os.environ.get("JOBPILOT_SMTP_USER", "")
+# Gmail App Password (NOT your login password); set in .env
+SMTP_PASSWORD: str = os.environ.get("JOBPILOT_SMTP_PASSWORD", "")
+# Recipient; defaults to SMTP_USER (send to yourself)
+SMTP_TO: str = os.environ.get("JOBPILOT_SMTP_TO", "")
+
+# ============================================================
 # Application Status Flow
 # ============================================================
 APPLICATION_STATUSES = [

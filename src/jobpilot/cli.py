@@ -659,6 +659,7 @@ def pipeline_all(
     profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
     refine_top: int = typer.Option(20, "--refine", "-r", help="API 精评 top N（0=跳过）"),
     tailor_top: int = typer.Option(5, "--tailor", "-t", help="自动定制 top N 简历（0=跳过）"),
+    email: bool = typer.Option(False, "--email", help="跑完把 digest 发邮件（需配置 SMTP）"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """一条命令跑全流程：搜索 → 打分 → 定制简历 → 日报（投递留人工）。"""
@@ -699,7 +700,45 @@ def pipeline_all(
     )
     if result.report_path:
         console.print(f"[green]日报: {result.report_path}[/green]")
+
+    if email:
+        _send_digest_email(db, profile_id)
+
     console.print("[dim]下一步: jobpilot list --min-score 7 查看高分岗 → jobpilot apply 投递[/dim]")
+
+
+def _send_digest_email(db: JobPilotDB, profile_id: int) -> None:
+    """Generate the digest and email it; report outcome to console."""
+    from jobpilot import notify
+    from jobpilot.report import generate_digest
+
+    subject, body = generate_digest(db, profile_id)
+    try:
+        recipient = notify.send_email(subject, body)
+        console.print(f"[green]✉️  digest 已发送至 {recipient}[/green]")
+    except notify.EmailNotConfigured as e:
+        console.print(f"[yellow]未发邮件: {e}[/yellow]")
+    except Exception as e:  # noqa: BLE001 - surface SMTP failure without crashing
+        console.print(f"[red]邮件发送失败: {e}[/red]")
+
+
+@app.command()
+def digest(
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
+    email: bool = typer.Option(False, "--email", help="发邮件（否则仅终端预览）"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """预览/发送每日 digest（新增高分岗 + 待跟进投递）。"""
+    _setup_logging(verbose)
+    from jobpilot.report import generate_digest
+
+    db = _get_db()
+    subject, body = generate_digest(db, profile_id)
+    console.print(f"[bold]{subject}[/bold]\n")
+    console.print(body)
+    if email:
+        console.print()
+        _send_digest_email(db, profile_id)
 
 
 @app.command(name="import-xhs")

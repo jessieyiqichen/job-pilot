@@ -47,3 +47,6 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Logs (scheduled run output)
+logs/

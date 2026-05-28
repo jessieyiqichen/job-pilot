@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jobpilot.daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/chenxiaowen/Desktop/IDEAS！/job-pilot/scripts/daily_run.sh</string>
+    </array>
+
+    <!-- 运行时间：每天 HH:MM。改这两个数字即可调整。 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- 机器在计划时间处于睡眠时，醒来后补跑一次 -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/chenxiaowen/Desktop/IDEAS！/job-pilot/logs/daily.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/chenxiaowen/Desktop/IDEAS！/job-pilot/logs/daily.err.log</string>
+</dict>
+</plist>

@@ -23,6 +23,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 11: 新一轮XHS搜索 6关键词（274→349岗位，+75新增，高分28→37），API精评top20（05-06）
 - Phase 12: 全流程自动化 `pipeline-all`（搜索→打分→定制→日报，单命令，stage 隔离失败）+ 偏好持久化 .claude/preferences.md + SessionStart hook 自动注入偏好（05-27，293 tests）
 - Phase 13: 日报增强（新增高分岗位 digest 近N天 + 投递跟进提醒 + 修复 report profile_id=1 bug）（05-27，299 tests）
+- Phase 14: 邮件 digest + 本地 launchd 定时（notify.py SMTP + generate_digest + pipeline-all --email + digest 命令 + daily_run.sh + plist）（05-28，307 tests）
 
 ## 关键数据
 
@@ -34,7 +35,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 ## 待完成（用户已批准的升级路线图，全选）
 
 - [x] Phase 13: 日报增强（#1 新岗 digest + #2 跟进提醒）
-- [ ] Phase 14: 定时跑（/schedule 把 pipeline-all 接 cron，websearch-only 无人值守）— #1 的调度部分
+- [x] Phase 14: 定时跑（本地 launchd + 邮件 digest）— #1 调度部分。⚠️ 待用户：填 .env（SMTP 凭证）+ 给定时时间 → 我 launchctl load 并发一封测试邮件
 - [ ] Phase 15: 面试准备生成器（高分岗+简历 → 面试题+STAR 要点）— #3
 - [ ] Phase 16: 反馈驱动评分校准（投递/跳过决策 → 调偏好权重）— #4，过度工程风险，克制
 
@@ -96,6 +97,31 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 **测试**：293 → 299（+6），全过。真实 DB 烟测：推荐投递表已正常填充（bug 修复验证），新分区无数据时正确不渲染。
 
 **待 Opus review**：discovered_at 用字符串比较（ISO 格式天然有序，OK）；新岗 digest 复用 list_top_scored_jobs+Python 过滤而非新 SQL（避免重复 SQL）。
+
+### 邮件 digest + 定时调度 Phase 14（2026-05-28）
+
+**需求**：用户选「邮件到 Gmail + 自己定时间」。因 DB/简历是本地且 DB gitignored → 用本地 launchd（非云端 agent）。
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/notify.py` | 新建。SMTP 发信（is_configured/send_email），凭证全走 config.SMTP_*（env），EmailNotConfigured 异常 |
+| `src/jobpilot/config.py` | 新增 SMTP_HOST/PORT/USER/PASSWORD/TO（env 驱动，默认 gmail 587） |
+| `src/jobpilot/report.py` | 新增 generate_digest()→(subject, body) 精简邮件正文（新高分岗+待跟进） |
+| `src/jobpilot/cli.py` | pipeline-all 加 --email；新增 digest 命令（预览/发送）；_send_digest_email 辅助 |
+| `scripts/daily_run.sh` | launchd wrapper：cd 项目+source .env+jobpilot pipeline-all --platforms websearch --email |
+| `scripts/com.jobpilot.daily.plist` | launchd 定时模板，默认 08:00（改 Hour/Minute），日志写 logs/ |
+| `.env.example` | 密钥模板（ANTHROPIC + SMTP）|
+| `.gitignore` | 加 logs/ |
+| `tests/test_notify.py` + `tests/test_report_digest_body.py` | +8 测试 |
+
+**测试**：299 → 307（+8），全过。bash -n + plutil -lint 均通过。digest 预览烟测正常。
+
+**未完成（需用户配合，我无法替做）**：
+1. 用户 `cp .env.example .env` 填真实 ANTHROPIC_API_KEY + Gmail 应用专用密码
+2. 用户给定时时间 → 改 plist Hour/Minute → `cp` 到 ~/Library/LaunchAgents/ → `launchctl load`
+3. 配好后跑 `jobpilot digest --email` 发测试邮件验证
+（SMTP 真实发送未端到端测过，只 mock 测了逻辑）
 
 ### 新一轮XHS搜索（2026-05-06）
 
