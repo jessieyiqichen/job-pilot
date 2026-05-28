@@ -630,6 +630,44 @@ def advisor(
 
 
 @app.command()
+def ask(
+    question: str = typer.Argument(..., help="求职问题，如 '这个 offer 接不接'"),
+    job_id: str = typer.Option("", "--job", "-j", help="针对某个具体岗位提问（注入 JD+评分）"),
+    profile_id: int = typer.Option(config.DEFAULT_PROFILE_ID, "--profile", "-p", help="Profile ID"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """求职答疑：结合你的真实处境+偏好回答求职问题（offer/薪资/HR 应对等）。"""
+    _setup_logging(verbose)
+    from jobpilot.ask import AskError, answer_question, build_ask_prompt, gather_context
+
+    db = _get_db()
+    profile = db.get_profile(profile_id)
+    if not profile:
+        console.print("[red]No profile found. Run 'jobpilot resume <file>' first.[/red]")
+        raise typer.Exit(1)
+
+    pinned = job_id or None
+
+    # No API key: export the prompt for a manual Claude.ai workflow.
+    if not config.ANTHROPIC_API_KEY:
+        context = gather_context(db, profile_id, pinned)
+        prompt = build_ask_prompt(question, profile, context)
+        console.print("[yellow]未配置 API key，导出 prompt 供 Claude.ai 手动使用：[/yellow]\n")
+        console.print(prompt)
+        return
+
+    console.print("思考中...")
+    try:
+        answer = answer_question(question, profile, db, pinned)
+    except AskError as e:
+        console.print(f"[red]回答失败: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print(answer)
+
+
+@app.command()
 def greeting(
     job_id: str = typer.Argument(..., help="Job ID"),
     channel: str = typer.Option("boss", "--channel", "-c", help="渠道: boss / xhs / email"),

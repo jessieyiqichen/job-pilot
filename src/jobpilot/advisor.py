@@ -222,17 +222,41 @@ def format_diagnosis_markdown(d: StrategyDiagnosis) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+# Preference keys worth feeding the advisor, with human labels. Key names match
+# resume_config.yaml's `preferences` block (the single source of truth).
+_PREF_LABELS: tuple[tuple[str, str], ...] = (
+    ("career_track", "目标方向"),
+    ("job_type", "类型"),
+    ("career_stage", "阶段"),
+    ("preferred_cities", "城市"),
+    ("preferred_industries", "偏好行业"),
+    ("priorities", "看重"),
+    ("deal_breakers", "deal-breaker"),
+    ("core_strengths", "核心能力"),
+    ("learning_goals", "学习目标"),
+)
+
+
 def _format_preferences(profile: Profile) -> str:
-    """Pull the preferences block out of the profile for the prompt."""
-    prefs = {}
+    """Format the user's preferences for the prompt.
+
+    Source of truth is resume_config.yaml (loaded via scorer._load_preferences).
+    profile.structured["preferences"] takes precedence if present so tests stay
+    hermetic, but in practice it's empty and we fall back to the YAML config.
+    """
+    prefs: dict = {}
     if isinstance(profile.structured, dict):
         prefs = profile.structured.get("preferences", {}) or {}
     if not prefs:
+        try:
+            from jobpilot.ai.scorer import _load_preferences
+
+            prefs = _load_preferences() or {}
+        except Exception:  # noqa: BLE001 - config missing/unreadable is non-fatal
+            prefs = {}
+    if not prefs:
         return "(无明确偏好记录)"
-    parts = []
-    for key in ("career_track", "cities", "deal_breakers", "values", "salary_floor"):
-        if key in prefs and prefs[key]:
-            parts.append(f"- {key}: {prefs[key]}")
+    parts = [f"- {label}: {prefs[key]}" for key, label in _PREF_LABELS if prefs.get(key)]
     return "\n".join(parts) if parts else str(prefs)
 
 

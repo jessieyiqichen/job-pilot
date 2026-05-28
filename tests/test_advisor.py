@@ -14,6 +14,7 @@ from jobpilot import config
 from jobpilot.advisor import (
     AdvisorError,
     StrategyDiagnosis,
+    _format_preferences,
     build_advisor_prompt,
     diagnose,
     format_diagnosis_markdown,
@@ -248,6 +249,31 @@ def test_build_prompt_includes_diagnosis_and_prefs():
     assert "37" in prompt          # high-score total
     assert "还没开始投" in prompt   # headline
     assert "AI产品经理" in prompt or "上海" in prompt  # prefs fed in
+
+
+# ----------------------------------------------------------------------
+# _format_preferences — source precedence
+# ----------------------------------------------------------------------
+
+
+def test_format_preferences_uses_profile_structured_first():
+    profile = Profile(
+        id=10, structured={"preferences": {"career_track": "AI产品经理", "deal_breakers": ["996"]}}
+    )
+    out = _format_preferences(profile)
+    assert "AI产品经理" in out
+    assert "996" in out
+
+
+def test_format_preferences_falls_back_to_config(monkeypatch):
+    # Empty profile → must fall back to resume_config.yaml loader
+    monkeypatch.setattr(
+        "jobpilot.ai.scorer._load_preferences",
+        lambda: {"career_track": ["AI产品经理"], "preferred_cities": ["上海"]},
+    )
+    out = _format_preferences(Profile(id=10, structured={}))
+    assert "AI产品经理" in out
+    assert "上海" in out
 
 
 # ----------------------------------------------------------------------

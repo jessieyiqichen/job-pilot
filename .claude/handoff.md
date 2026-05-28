@@ -36,6 +36,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 23: GitHub 招聘渠道适配器（adapters/github_jobs.py，gh search issues 官方API+AI抽取，合规不爬；接入 search/pipeline；broaden_query 去 job-type/城市词防 AND 过窄）（05-28，362 tests）
 - Phase 23.5: GitHub 评论抽取（拉 ruanyf/weekly 最新「谁在招人」帖评论一起抽，岗位都在评论里；_latest_thread_number 用 --match title 只匹配月度帖标题避免抓到自荐帖；call_gh_issue_comments via gh api；MAX_THREAD_COMMENTS=30）。机制验证：评论 0→14 条流入 AI；产出随当月帖内容（5月帖多非产品岗被过滤，净增0）（05-28，github 11 tests）
 - Phase 24: 策略诊断军师 advisor（advisor.py：诊断层 diagnose 确定性算 6 信号[漏斗/高分岗缺口/停滞/定制覆盖/投递节奏/数据量门槛]+建议层 generate_advice LLM 翻人话，无 key 降级导出 prompt；诚实护栏：投递<ADVISOR_MIN_APPLICATIONS(5) 时改口"先投起来"不硬编转化分析）+ jobpilot advisor 命令 + db.count_jobs_by_status（05-28，378 tests）
+- Phase 25: 对话答疑军师 ask（ask.py：gather_context 收集诊断+高分岗+可选岗位，build_ask_prompt 注入真实处境+偏好，结合数据回答 offer/薪资/HR 问题；--job 注入具体 JD+评分；无 key 降级导出 prompt）+ jobpilot ask 命令 + **修复偏好取错源 bug**（advisor/ask 原从 profile.structured 取偏好[空]，改为回退 scorer._load_preferences 读 resume_config.yaml + 修正 key 名 cities→preferred_cities/values→priorities）（05-28，391 tests）
 
 ## 关键数据
 
@@ -78,6 +79,25 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 对话答疑军师 Phase 25（2026-05-28）
+
+**需求**：军师第二刀。`jobpilot ask "<问题>"` 结合用户真实处境回答求职问题（offer 接不接/薪资怎么谈/HR 怎么应对），区别于通用 ChatGPT 的点=喂进真实数据。
+
+**设计**：复用 advisor.diagnose 做处境上下文。gather_context 收集 [诊断 + top10 高分岗 + 可选某岗位 JD/评分]，build_ask_prompt 把 [处境 + 偏好 + 高分岗 + 问题] 组装。`--job <id>` 注入具体岗位上下文做针对性回答。honesty 规则：不知道就说不知道、给可执行下一步、350 字内、讲人话。
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/ask.py` | 新建。AskContext（frozen）+ gather_context + build_ask_prompt + answer_question（API，无 key 抛 AskError） |
+| `src/jobpilot/cli.py` | 新增 ask 命令（位置参数 question + --job/-j 选项），无 key 导出 prompt |
+| `src/jobpilot/advisor.py` | **修偏好 bug**：_format_preferences 改为 profile.structured 优先→回退 scorer._load_preferences()（resume_config.yaml 才是真源），并修正 key 名（cities→preferred_cities/values→priorities/salary_floor→min_salary），新增 _PREF_LABELS 映射。ask 复用此函数，一处修两边好 |
+| `tests/test_ask.py` + `tests/test_cli_ask.py` | +11 测试 |
+| `tests/test_advisor.py` | +2 测试（偏好源优先级 + 回退） |
+
+**测试**：378 → 391（+13），全过（1.9s）。真实 DB 烟测：ask prompt 正确注入 37 个高分岗 + 真实偏好（城市/deal-breaker/看重项全出来了，修 bug 前显示"无偏好记录"）。
+
+**⚠️ 注意**：偏好 bug 同样影响 Phase 24 的 advisor（已提交版本偏好为空），本次一并修复。cli.py 行数继续增长（advisor+ask），cli.py 拆分技术债仍未还（已挂独立任务卡）。
 
 ### 策略诊断军师 Phase 24（2026-05-28）
 
