@@ -630,6 +630,26 @@ def advisor(
 
 
 @app.command()
+def plan(
+    profile_id: int = typer.Option(config.DEFAULT_PROFILE_ID, "--profile", "-p", help="Profile ID"),
+    target: int = typer.Option(0, "--target", "-t", help="本周投递目标数（0=用默认配置）"),
+    output: str = typer.Option("", "--output", "-o", help="保存到 Markdown 文件"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """本周投递计划：列出该投哪几个高分岗 + 哪些投递该跟进（确定性，不烧 API）。"""
+    _setup_logging(verbose)
+    from jobpilot.planner import build_weekly_plan, format_plan_markdown
+
+    db = _get_db()
+    weekly_plan = build_weekly_plan(db, profile_id, target=target or None)
+    md = format_plan_markdown(weekly_plan)
+    console.print(md)
+    if output:
+        Path(output).expanduser().write_text(md, encoding="utf-8")
+        console.print(f"[green]已保存: {output}[/green]")
+
+
+@app.command()
 def ask(
     question: str = typer.Argument(..., help="求职问题，如 '这个 offer 接不接'"),
     job_id: str = typer.Option("", "--job", "-j", help="针对某个具体岗位提问（注入 JD+评分）"),

@@ -37,6 +37,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 23.5: GitHub 评论抽取（拉 ruanyf/weekly 最新「谁在招人」帖评论一起抽，岗位都在评论里；_latest_thread_number 用 --match title 只匹配月度帖标题避免抓到自荐帖；call_gh_issue_comments via gh api；MAX_THREAD_COMMENTS=30）。机制验证：评论 0→14 条流入 AI；产出随当月帖内容（5月帖多非产品岗被过滤，净增0）（05-28，github 11 tests）
 - Phase 24: 策略诊断军师 advisor（advisor.py：诊断层 diagnose 确定性算 6 信号[漏斗/高分岗缺口/停滞/定制覆盖/投递节奏/数据量门槛]+建议层 generate_advice LLM 翻人话，无 key 降级导出 prompt；诚实护栏：投递<ADVISOR_MIN_APPLICATIONS(5) 时改口"先投起来"不硬编转化分析）+ jobpilot advisor 命令 + db.count_jobs_by_status（05-28，378 tests）
 - Phase 25: 对话答疑军师 ask（ask.py：gather_context 收集诊断+高分岗+可选岗位，build_ask_prompt 注入真实处境+偏好，结合数据回答 offer/薪资/HR 问题；--job 注入具体 JD+评分；无 key 降级导出 prompt）+ jobpilot ask 命令 + **修复偏好取错源 bug**（advisor/ask 原从 profile.structured 取偏好[空]，改为回退 scorer._load_preferences 读 resume_config.yaml + 修正 key 名 cities→preferred_cities/values→priorities）（05-28，391 tests）
+- Phase 26: 投递计划军师 plan（planner.py：build_weekly_plan 确定性算本周投递清单[待投高分岗 scored/tailored 按分排序+ready 标记+理由]+跟进清单[停滞投递按天数倒序]+节奏提示，PLAN_WEEKLY_TARGET 截断；format_plan_markdown 渲染；**纯确定性不烧 API**）+ jobpilot plan 命令（--target 覆盖目标数）（05-28，402 tests）。军师三刀齐：advisor 诊断+ask 答疑+plan 计划
 
 ## 关键数据
 
@@ -79,6 +80,29 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 投递计划军师 Phase 26（2026-05-28）
+
+**需求**：军师第三刀。`jobpilot plan` 给一份本周可执行的投递行动清单。和 advisor 的分工：advisor 诊断"哪里有问题"，plan 给"这周具体投哪几个"。
+
+**关键决策：纯确定性，不烧 API**。"该投哪些/该跟进哪些"完全能从数据算，比 LLM 自由发挥更扛得住追问、更符合"讲实话可执行"。
+
+**逻辑**：
+- 本周投递清单 = list_top_scored_jobs(statuses=scored/tailored=未投, min_score>=7) 按分降序，PLAN_WEEKLY_TARGET(默认5) 截断；ready=status=="tailored"（简历已定制）；reason 规则派生（高分优先/简历就绪今天能投/先 tailor）
+- 跟进清单 = applied 状态停滞 >= FOLLOWUP_STALE_DAYS，按 days_since 倒序
+- note = 待投清单空→提示去 search/score；已达标→提示保持
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/planner.py` | 新建。PlanItem/FollowUpItem/WeeklyPlan（frozen）+ _days_since + build_weekly_plan + format_plan_markdown |
+| `src/jobpilot/config.py` | 新增 PLAN_WEEKLY_TARGET(5)，env 可覆盖 |
+| `src/jobpilot/cli.py` | 新增 plan 命令（--target/--output） |
+| `tests/test_planner.py` + `tests/test_cli_plan.py` | +11 测试 |
+
+**测试**：391 → 402（+11），全过（2.0s）。真实 DB 烟测：profile 10 正确列出 top5 待投高分岗，区分待定制/就绪，给具体动作；0 投递→无跟进区（符合预期）。
+
+**军师全貌（三刀已齐）**：advisor（策略诊断）+ ask（对话答疑）+ plan（投递计划）。情绪支持未单独做，体现在各命令语气规则。可选后续：把 advisor/plan 接进 pipeline-all 末尾自动出周报；或做 jobpilot coach 把三者串成一个交互式入口。cli.py 拆分技术债仍未还。
 
 ### 对话答疑军师 Phase 25（2026-05-28）
 

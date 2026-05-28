@@ -92,6 +92,8 @@ FOLLOWUP_STALE_DAYS: int = int(os.environ.get("JOBPILOT_FOLLOWUP_STALE_DAYS", "7
 ADVISOR_MIN_APPLICATIONS: int = int(os.environ.get("JOBPILOT_ADVISOR_MIN_APPS", "5"))
 # Window (days) for the "application pace" signal — how many applied recently.
 ADVISOR_PACE_DAYS: int = int(os.environ.get("JOBPILOT_ADVISOR_PACE_DAYS", "7"))
+# Weekly application target — how many jobs the plan suggests applying to per week.
+PLAN_WEEKLY_TARGET: int = int(os.environ.get("JOBPILOT_PLAN_WEEKLY_TARGET", "5"))
 
 # ============================================================
 # Email delivery (SMTP) — secrets come from env / .env, never committed
