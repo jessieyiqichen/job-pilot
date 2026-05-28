@@ -16,6 +16,7 @@ data/report_*.md
 data/resume_config.yaml
 data/xhs_jobs.json
 data/xhs_favorites_raw.json
+data/boss_manual_jobs.json
 data/*.md
 .DS_Store
 

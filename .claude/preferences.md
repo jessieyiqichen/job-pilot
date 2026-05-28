@@ -1,0 +1,38 @@
+# 用户偏好（每个 session 开始必读）
+
+> 这是用户长期偏好的单一事实来源。规划、写简历话术、写代码前先读这里。
+> 求职结构化偏好（role_fit / 城市 / deal-breaker 等）在 `data/resume_config.yaml`，本文件只记不在那里的部分。
+
+---
+
+## 1. 求职偏好
+
+- **目标**：AI 产品实习（AI Product Manager intern），在校生
+- **方向**：AI 产品方向。`career_track = AI产品经理 / 产品经理`；旧的数据分析/量化/纯开发岗位是 `weak_match`，不是目标
+- **城市**：深圳 / 北京 / 上海
+- **deal-breaker**：996、加班多、单休、大小周
+- **看重**：成长空间 > 行业前景 > WLB
+- **简历**：主力 `Jessie_Chen_Resume_AI_Product.docx`，英文版；技术栈展示用 ` · ` 分隔，只放 headline 级（Python · Claude API · Next.js · TypeScript · SQLite · MCP），不放 dotenv/npm/axios/Zod 这类工具
+- 完整结构化偏好见 `data/resume_config.yaml` 的 `preferences` 段
+
+## 2. 话术习惯（写简历 / 文案 / 给建议时）
+
+- **中文交流**
+- **拒绝 buzzword**：不堆名词（"eval 框架/资产库/多 Agent 协作"这类），每句话都要能扛住面试官追问
+- **讲人话、讲实话**：简历 bullet 要讲面试官听得懂的东西——成本、可靠性、踩过的 LLM 坑及解决方式，而不是抽象工程词
+- **不夸大**：没在团队用过就不说"团队可复用"；没做的事不写
+- **给建议的结构**：先给明确判断 / 推荐方案（带"推荐"标注），再展开理由，最后留一个可追问的反问
+- **PM 视角优先**：技术亮点按"PM 相关度 × 一句话能讲清"排序
+
+## 3. 工作 workflow 习惯
+
+- **跨 session 交接强制**：每完成一个任务立即更新 `.claude/handoff.md`（标 ✅ + 写完成报告）；不更新 = 任务未完成。session 结束 commit & push
+- **先写测试再实现**（TDD，80%+ 覆盖）
+- **代码约定**：frozen dataclass（不可变）、connection-per-call SQLite、adapter 模式隔离平台、文件 <800 行、不做爬虫
+- **AI 可选降级**：无 API key 时走启发式，不影响基本功能
+
+---
+
+## 待用户确认 / 补充
+- [ ] 话术习惯是我从对话推断的，如有出入请直接改本文件
+- [ ] 是否还有其他长期偏好（如目标公司清单、薪资底线、投递节奏）需要记录

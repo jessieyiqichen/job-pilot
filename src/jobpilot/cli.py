@@ -647,6 +647,61 @@ def pipeline(
     console.print()
 
 
+@app.command(name="pipeline-all")
+def pipeline_all(
+    keywords: str = typer.Option(
+        "", "--keywords", "-k", help="逗号分隔搜索关键词；留空则用偏好的 career_track"
+    ),
+    city: str = typer.Option(config.DEFAULT_CITY, "--city", "-c"),
+    platforms: str = typer.Option(
+        "websearch,xhs", "--platforms", help="逗号分隔搜索渠道"
+    ),
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
+    refine_top: int = typer.Option(20, "--refine", "-r", help="API 精评 top N（0=跳过）"),
+    tailor_top: int = typer.Option(5, "--tailor", "-t", help="自动定制 top N 简历（0=跳过）"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """一条命令跑全流程：搜索 → 打分 → 定制简历 → 日报（投递留人工）。"""
+    _setup_logging(verbose)
+    from jobpilot.ai.scorer import _load_preferences
+    from jobpilot.pipeline import build_config, run_pipeline
+
+    prefs = _load_preferences()
+    kw_list = [k.strip() for k in keywords.split(",") if k.strip()] or None
+    platform_list = [p.strip() for p in platforms.split(",") if p.strip()]
+
+    cfg = build_config(
+        prefs,
+        keywords=kw_list,
+        city=city,
+        platforms=platform_list,
+        profile_id=profile_id,
+        refine_top=refine_top,
+        tailor_top=tailor_top,
+    )
+
+    console.print(
+        f"[bold]🚀 全流程自动化[/bold]  关键词={list(cfg.keywords)} "
+        f"渠道={list(cfg.platforms)} 城市={cfg.city or '默认'}\n"
+    )
+
+    db = _get_db()
+    result = run_pipeline(db, cfg, progress=lambda msg: console.print(f"[dim]{msg}[/dim]"))
+
+    console.print("\n[bold]运行结果[/bold]")
+    for st in result.stages:
+        mark = "[green]✓[/green]" if st.ok else "[red]✗[/red]"
+        console.print(f"  {mark} {st.name}: {st.detail}")
+
+    console.print(
+        f"\n[bold]汇总[/bold]  入库 {result.found} · 秒评 {result.scored} · "
+        f"精评 {result.refined} · 定制 {result.tailored} 份简历"
+    )
+    if result.report_path:
+        console.print(f"[green]日报: {result.report_path}[/green]")
+    console.print("[dim]下一步: jobpilot list --min-score 7 查看高分岗 → jobpilot apply 投递[/dim]")
+
+
 @app.command(name="import-xhs")
 def import_xhs(
     json_file: str = typer.Argument(..., help="Path to JSON file with XHS job data"),

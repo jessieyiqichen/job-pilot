@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat \"$CLAUDE_PROJECT_DIR/.claude/preferences.md\" 2>/dev/null || true",
+            "statusMessage": "加载用户偏好…"
+          }
+        ]
+      }
+    ]
+  }
+}
