@@ -59,6 +59,16 @@ REDNOTE_MCP_PATH: str = os.environ.get(
 MIN_RECOMMEND_SCORE: float = 7.0
 
 # ============================================================
+# Reports & Follow-up
+# ============================================================
+# Default profile used by reports/pipeline when none is given
+DEFAULT_PROFILE_ID: int = int(os.environ.get("JOBPILOT_PROFILE_ID", "10"))
+# Daily digest: a job counts as "new" if discovered within N days
+NEW_JOB_LOOKBACK_DAYS: int = int(os.environ.get("JOBPILOT_NEW_JOB_LOOKBACK_DAYS", "1"))
+# Follow-up reminder: 'applied' with no update for >= N days needs follow-up
+FOLLOWUP_STALE_DAYS: int = int(os.environ.get("JOBPILOT_FOLLOWUP_STALE_DAYS", "7"))
+
+# ============================================================
 # Application Status Flow
 # ============================================================
 APPLICATION_STATUSES = [

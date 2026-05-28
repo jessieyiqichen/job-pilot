@@ -22,6 +22,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 10: 多轮搜索（5轮XHS+websearch，267→274岗位）+ 手动Boss导入7个 + 简历新版生成（03-28）
 - Phase 11: 新一轮XHS搜索 6关键词（274→349岗位，+75新增，高分28→37），API精评top20（05-06）
 - Phase 12: 全流程自动化 `pipeline-all`（搜索→打分→定制→日报，单命令，stage 隔离失败）+ 偏好持久化 .claude/preferences.md + SessionStart hook 自动注入偏好（05-27，293 tests）
+- Phase 13: 日报增强（新增高分岗位 digest 近N天 + 投递跟进提醒 + 修复 report profile_id=1 bug）（05-27，299 tests）
 
 ## 关键数据
 
@@ -30,9 +31,12 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Score >= 8.0：20 个
 - Score >= 7.0：37 个
 
-## 待完成
+## 待完成（用户已批准的升级路线图，全选）
 
-（无）
+- [x] Phase 13: 日报增强（#1 新岗 digest + #2 跟进提醒）
+- [ ] Phase 14: 定时跑（/schedule 把 pipeline-all 接 cron，websearch-only 无人值守）— #1 的调度部分
+- [ ] Phase 15: 面试准备生成器（高分岗+简历 → 面试题+STAR 要点）— #3
+- [ ] Phase 16: 反馈驱动评分校准（投递/跳过决策 → 调偏好权重）— #4，过度工程风险，克制
 
 ## Review 备注
 
@@ -76,6 +80,22 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 **实现**：新建 `.claude/settings.json`，加 SessionStart hook，每次 session 开始 `cat $CLAUDE_PROJECT_DIR/.claude/preferences.md` 注入上下文。已 pipe-test（exit 0，全文输出）+ jq 校验通过。
 
 **注意**：本 session 启动时 .claude/ 无 settings 文件，配置 watcher 可能需用户打开一次 `/hooks` 或重启 Claude Code 才加载。hook 本身写法正确。每个新 session 起来会自动带上 preferences.md 全文。
+
+### 日报增强 Phase 13（2026-05-27）
+
+**需求**：用户全选升级路线图。本轮做 #1（新岗 digest）+ #2（跟进提醒）。
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/report.py` | 新增 `find_new_high_score_jobs()`（近 N 天发现的高分岗，按 discovered_at 字符串比较过滤）+ `find_stale_applications()`（applied 状态 >= N 天无更新）+ 两个新报告分区。**修复 profile_id=1 bug**：默认改 config.DEFAULT_PROFILE_ID（10），之前日报"推荐投递"恒为空 |
+| `src/jobpilot/config.py` | 新增 DEFAULT_PROFILE_ID(10) / NEW_JOB_LOOKBACK_DAYS(1) / FOLLOWUP_STALE_DAYS(7)，均可环境变量覆盖 |
+| `src/jobpilot/pipeline.py` | `_report_stage` 传 profile_id=cfg.profile_id（配合 bug 修复） |
+| `tests/test_report_digest.py` | 新增 6 个单元测试 |
+
+**测试**：293 → 299（+6），全过。真实 DB 烟测：推荐投递表已正常填充（bug 修复验证），新分区无数据时正确不渲染。
+
+**待 Opus review**：discovered_at 用字符串比较（ISO 格式天然有序，OK）；新岗 digest 复用 list_top_scored_jobs+Python 过滤而非新 SQL（避免重复 SQL）。
 
 ### 新一轮XHS搜索（2026-05-06）
 

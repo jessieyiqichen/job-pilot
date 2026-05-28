@@ -11,16 +11,54 @@ Outputs:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from jobpilot import config
 from jobpilot.db import JobPilotDB
+from jobpilot.models import Application, Job, JobScore
 from jobpilot.tracker import get_pipeline_summary
 
 logger = logging.getLogger(__name__)
 
 
-def generate_daily_report(db: JobPilotDB, profile_id: int = 1) -> str:
+def _cutoff(days: float) -> str:
+    """ISO timestamp `days` ago (matches models.now_iso format for string compare)."""
+    return (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def find_new_high_score_jobs(
+    db: JobPilotDB,
+    profile_id: int,
+    min_score: float,
+    lookback_days: int,
+) -> list[tuple[JobScore, Job]]:
+    """High-score jobs discovered within the last `lookback_days`.
+
+    Used for the daily digest so re-running the pipeline surfaces only what is
+    genuinely new, not the full backlog.
+    """
+    cutoff = _cutoff(lookback_days)
+    pairs = db.list_top_scored_jobs(
+        profile_id=profile_id,
+        min_score=min_score,
+        statuses=("scored", "tailored"),
+        limit=200,
+    )
+    return [(s, j) for s, j in pairs if j.discovered_at and j.discovered_at >= cutoff]
+
+
+def find_stale_applications(db: JobPilotDB, stale_days: int) -> list[Application]:
+    """Applications still in 'applied' with no update for >= `stale_days`.
+
+    These are the ones that need a follow-up nudge — replied/interview/offer/
+    rejected are already resolved and intentionally excluded.
+    """
+    cutoff = _cutoff(stale_days)
+    apps = db.list_applications(status="applied")
+    return [a for a in apps if a.updated_at and a.updated_at < cutoff]
+
+
+def generate_daily_report(db: JobPilotDB, profile_id: int = config.DEFAULT_PROFILE_ID) -> str:
     """Generate a Markdown daily report.
 
     Args:
@@ -68,6 +106,25 @@ def generate_daily_report(db: JobPilotDB, profile_id: int = 1) -> str:
         sections.append(f"  {label:8s} | {bar} {count}")
     sections.append("```\n")
 
+    # New high-score jobs since last run (digest)
+    new_high = find_new_high_score_jobs(
+        db,
+        profile_id=profile_id,
+        min_score=config.MIN_RECOMMEND_SCORE,
+        lookback_days=config.NEW_JOB_LOOKBACK_DAYS,
+    )
+    if new_high:
+        sections.append(
+            f"## 🆕 新增高分岗位（近 {config.NEW_JOB_LOOKBACK_DAYS} 天，{len(new_high)} 个）\n"
+        )
+        sections.append("| 评分 | 职位 | 公司 | 城市 |")
+        sections.append("|------|------|------|------|")
+        for score, job in new_high:
+            sections.append(
+                f"| {score.overall_score:.1f} | {job.title} | {job.company} | {job.city} |"
+            )
+        sections.append("")
+
     # Top matches
     top_scores = db.list_scores_with_jobs(
         profile_id=profile_id,
@@ -99,6 +156,21 @@ def generate_daily_report(db: JobPilotDB, profile_id: int = 1) -> str:
             )
         sections.append("")
 
+    # Follow-up reminders: applications gone quiet
+    stale_apps = find_stale_applications(db, stale_days=config.FOLLOWUP_STALE_DAYS)
+    if stale_apps:
+        sections.append(
+            f"## ⏰ 待跟进投递（投递 >= {config.FOLLOWUP_STALE_DAYS} 天无回复，{len(stale_apps)} 个）\n"
+        )
+        sections.append("| 岗位 | 投递时间 | 建议 |")
+        sections.append("|------|----------|------|")
+        for app in stale_apps:
+            job = db.get_job(app.job_id)
+            title = job.title if job else app.job_id
+            applied = app.applied_at or app.updated_at
+            sections.append(f"| {title} | {applied} | 主动跟进或转入下一个 |")
+        sections.append("")
+
     # New unscored jobs
     new_jobs = db.list_jobs(status="new", limit=20)
     if new_jobs:
@@ -117,17 +189,22 @@ def generate_daily_report(db: JobPilotDB, profile_id: int = 1) -> str:
     return "\n".join(sections)
 
 
-def save_report(db: JobPilotDB, output_path: str | None = None) -> str:
+def save_report(
+    db: JobPilotDB,
+    output_path: str | None = None,
+    profile_id: int = config.DEFAULT_PROFILE_ID,
+) -> str:
     """Generate and save daily report.
 
     Args:
         db: Database instance
         output_path: Where to save. Default: data/report_YYYY-MM-DD.md
+        profile_id: Profile to use for score lookup
 
     Returns:
         Path to the saved report
     """
-    report = generate_daily_report(db)
+    report = generate_daily_report(db, profile_id)
     if not output_path:
         today = datetime.now().strftime("%Y-%m-%d")
         output_path = str(config.DATA_DIR / f"report_{today}.md")

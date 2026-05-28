@@ -208,7 +208,7 @@ def _report_stage(db: JobPilotDB, cfg: PipelineConfig) -> tuple[StageResult, str
     """Generate and persist the daily report. Returns (result, path)."""
     from jobpilot.report import save_report
 
-    path = save_report(db, None)
+    path = save_report(db, None, profile_id=cfg.profile_id)
     return StageResult("日报", True, f"已保存: {path}"), path
 
 
