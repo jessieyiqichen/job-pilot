@@ -6,8 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat \"$CLAUDE_PROJECT_DIR/.claude/preferences.md\" 2>/dev/null || true",
-            "statusMessage": "加载用户偏好…"
+            "command": "cat \"$CLAUDE_PROJECT_DIR/.claude/preferences.md\" \"$CLAUDE_PROJECT_DIR/.claude/me.md\" 2>/dev/null || true",
+            "statusMessage": "加载用户偏好与画像…"
           }
         ]
       }
