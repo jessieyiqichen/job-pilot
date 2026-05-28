@@ -57,6 +57,23 @@ greeting:
       desc: 多渠道求职 Agent           # 注意用同位语，别用括号注释
       use_for: 招聘 / Agent / 多 Agent 方向
       hook_detail: 用多个 Agent 分工完成搜岗、打分、定制简历，我负责定流程和判断标准
+  signature_name: <中文名>
+  formality: "商务正式但自然，不太随意也不太老气"   # 正式度校准
+  channels:                          # 三渠道差异化（jobpilot greeting -c boss/xhs/email）
+    boss:                            # 短打招呼 + 简历截图，HRBP 筛选层
+      tone: "短、克制、专业"
+      hook_max_chars: 80
+      attachment_note: "这是我的简历照片，方便您查看~"
+    xhs:                             # 私信，稍自然但得体
+      tone: "稍自然但得体，先表达兴趣再说申请"
+      hook_max_chars: 130
+    email:                           # 正式邮件
+      subject_format: "【<姓名> + {job_title} + 实习】"
+      structure: "自我介绍 → 看到招聘并表达兴趣 → 相关经历 → 随附简历 → 期待沟通"
+      signature: "<姓名>\n手机：<手机>\n邮箱：<邮箱>"
+  interaction_rules:                 # CLI 展示用，供你执行
+    - "HR 回复后二次锚定：发 demo 链接 + 简历 PDF"
+    - "HR 不回不要催，等 48-72h 再发有内容的 follow-up"
 
   # Role fit — controls how well different job types match your goals
   # strong_match: score × 1.0, good_match: score × 0.7, weak_match: score × 0.3 + cap at 5.0

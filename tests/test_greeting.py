@@ -1,4 +1,4 @@
-"""Tests for the personal-style greeting generator (fixed intro + LLM hook)."""
+"""Tests for the channel-aware, config-driven greeting generator."""
 
 from unittest.mock import MagicMock, patch
 
@@ -6,10 +6,13 @@ import pytest
 
 from jobpilot.ai.greeting import (
     GreetingError,
+    GreetingResult,
+    build_email_prompt,
     build_hook_prompt,
     check_style_violations,
     compose_greeting,
     generate_greeting,
+    interaction_tips,
 )
 from jobpilot.models import Job
 
@@ -18,96 +21,120 @@ PRODUCTS = [
     {"name": "MusiClaw", "desc": "演出数据平台", "use_for": "eval / 数据", "hook_detail": "自建 eval 框架"},
 ]
 
-
-# ----------------------------------------------------------------------
-# build_hook_prompt
-# ----------------------------------------------------------------------
-
-
-def test_hook_prompt_includes_jd_products_and_rules():
-    p = build_hook_prompt("负责 Agent 数字员工，做 eval", PRODUCTS)
-    assert "Agent 数字员工" in p
-    assert "JobPilot" in p and "MusiClaw" in p
-    assert "长破折号" in p  # style rules embedded
-    assert "vibe coding" in p  # echo keyword listed
-
-
-# ----------------------------------------------------------------------
-# compose_greeting
-# ----------------------------------------------------------------------
+GCFG = {
+    "base_template": "您好，我是陈亦奇，经济学方向。{hook}，希望能进一步沟通。",
+    "products": PRODUCTS,
+    "formality": "商务正式但自然",
+    "channels": {
+        "boss": {"tone": "短克制", "hook_max_chars": 80, "attachment_note": "这是我的简历照片~"},
+        "xhs": {"tone": "稍自然", "hook_max_chars": 130},
+        "email": {
+            "subject_format": "【陈亦奇 + {job_title} + 实习】",
+            "structure": "自我介绍→兴趣→经历→简历→沟通",
+            "signature": "陈亦奇\n手机：123\n邮箱：a@b.com",
+        },
+    },
+    "interaction_rules": ["二次锚定发 demo", "不催等 48-72h"],
+}
 
 
-def test_compose_inserts_hook_and_strips_punctuation():
-    tpl = "您好，我是X。{hook}，希望能进一步沟通。"
-    out = compose_greeting(tpl, "我用 JobPilot 做了多 Agent 协作。")
-    assert out == "您好，我是X。我用 JobPilot 做了多 Agent 协作，希望能进一步沟通。"
-
-
-def test_compose_strips_quotes():
-    tpl = "intro{hook}end"
-    out = compose_greeting(tpl, '"钩子"')
-    assert out == "intro钩子end"
+def _job():
+    return Job(job_id="x", title="AI产品实习生", company="字节", jd_text="负责 Agent 与 eval")
 
 
 # ----------------------------------------------------------------------
-# check_style_violations
+# prompts
 # ----------------------------------------------------------------------
 
 
-def test_style_flags_dash_parens_banned():
-    v = check_style_violations("我做过 JobPilot——多渠道求职 Agent（很厉害），届时联系")
+def test_hook_prompt_includes_tone_maxchars_and_rules():
+    p = build_hook_prompt("做 Agent 和 eval", PRODUCTS, {"tone": "短克制", "hook_max_chars": 80}, "正式但自然")
+    assert "短克制" in p
+    assert "80 字" in p
+    assert "正式但自然" in p
+    assert "MusiClaw" in p
+
+
+def test_email_prompt_includes_structure_and_facts():
+    p = build_email_prompt("jd", "AI产品实习生", "字节", PRODUCTS, "我是陈亦奇，经济学方向", "自我介绍→兴趣", "正式")
+    assert "自我介绍→兴趣" in p
+    assert "陈亦奇" in p
+    assert "全角冒号" in p
+
+
+# ----------------------------------------------------------------------
+# compose / style / tips
+# ----------------------------------------------------------------------
+
+
+def test_compose_inserts_and_strips():
+    out = compose_greeting("您好。{hook}，希望沟通。", '"我做过 JobPilot。"')
+    assert out == "您好。我做过 JobPilot，希望沟通。"
+
+
+def test_style_flags_casual_and_oldfashioned():
+    v = check_style_violations("这套方法挺像的，届时联系")
     joined = " ".join(v)
-    assert "破折号" in joined
-    assert "括号" in joined
+    assert "这套" in joined
+    assert "挺像的" in joined
     assert "届时" in joined
 
 
-def test_style_flags_vibe_coding_as_self_label():
-    # JD doesn't mention it -> violation
-    assert any("vibe coding" in x for x in check_style_violations("我擅长 vibe coding", jd_text="AI产品"))
-    # JD mentions it -> allowed (echo)
-    assert not any("vibe coding" in x for x in check_style_violations("我擅长 vibe coding", jd_text="我们推崇 vibe coding"))
-
-
-def test_style_clean_text_no_violations():
-    assert check_style_violations("我用多渠道求职 Agent JobPilot 做了 AI 打分", jd_text="") == []
+def test_interaction_tips_from_config():
+    with patch("jobpilot.ai.greeting._load_greeting_config", return_value=GCFG):
+        tips = interaction_tips()
+    assert len(tips) == 2
+    assert "二次锚定发 demo" in tips
 
 
 # ----------------------------------------------------------------------
-# generate_greeting
+# generate_greeting — channels
 # ----------------------------------------------------------------------
 
 
-@patch("jobpilot.ai.greeting._load_greeting_config")
 @patch("jobpilot.ai.greeting.config")
-def test_generate_raises_without_template(mock_config, mock_cfg):
+def test_unknown_channel_raises(mock_config):
     mock_config.ANTHROPIC_API_KEY = "key"
-    mock_cfg.return_value = {}  # no base_template
     with pytest.raises(GreetingError):
-        generate_greeting(Job(job_id="x", jd_text="jd"))
+        generate_greeting(_job(), channel="wechat")
 
 
-@patch("jobpilot.ai.greeting._load_greeting_config")
 @patch("jobpilot.ai.greeting.config")
-def test_generate_raises_without_api_key(mock_config, mock_cfg):
+@patch("jobpilot.ai.greeting._load_greeting_config", return_value=GCFG)
+def test_generate_raises_without_api_key(mock_cfg, mock_config):
     mock_config.ANTHROPIC_API_KEY = ""
-    mock_cfg.return_value = {"base_template": "intro {hook} end", "products": PRODUCTS}
     with pytest.raises(GreetingError):
-        generate_greeting(Job(job_id="x", jd_text="jd"))
+        generate_greeting(_job(), channel="boss")
 
 
-@patch("jobpilot.ai.greeting._load_greeting_config")
+@patch("jobpilot.ai.greeting._call_llm", return_value="我用 MusiClaw 做了 eval 框架")
 @patch("jobpilot.ai.greeting.config")
-def test_generate_composes_hook_into_template(mock_config, mock_cfg):
+@patch("jobpilot.ai.greeting._load_greeting_config", return_value=GCFG)
+def test_boss_channel_composes_intro_and_attachment(mock_cfg, mock_config, mock_llm):
     mock_config.ANTHROPIC_API_KEY = "key"
-    mock_config.ANTHROPIC_MODEL = "claude-x"
-    mock_cfg.return_value = {
-        "base_template": "您好，我是X。{hook}，希望沟通。",
-        "products": PRODUCTS,
-    }
-    fake = MagicMock()
-    fake.content = [MagicMock(text="我用 JobPilot 做了多 Agent 协作")]
-    with patch("anthropic.Anthropic") as mc:
-        mc.return_value.messages.create.return_value = fake
-        out = generate_greeting(Job(job_id="x", jd_text="招 Agent"))
-    assert out == "您好，我是X。我用 JobPilot 做了多 Agent 协作，希望沟通。"
+    r = generate_greeting(_job(), channel="boss")
+    assert r.channel == "boss"
+    assert "陈亦奇" in r.body  # fixed intro
+    assert "MusiClaw" in r.body  # hook
+    assert r.attachment_note == "这是我的简历照片~"
+    assert r.subject == ""
+
+
+@patch("jobpilot.ai.greeting._call_llm", return_value="正文内容")
+@patch("jobpilot.ai.greeting.config")
+@patch("jobpilot.ai.greeting._load_greeting_config", return_value=GCFG)
+def test_email_channel_has_subject_and_signature(mock_cfg, mock_config, mock_llm):
+    mock_config.ANTHROPIC_API_KEY = "key"
+    r = generate_greeting(_job(), channel="email")
+    assert r.channel == "email"
+    assert r.subject == "【陈亦奇 + AI产品实习生 + 实习】"
+    assert "正文内容" in r.body
+    assert "手机：123" in r.body  # signature appended
+
+
+def test_greeting_result_save_text():
+    r = GreetingResult(channel="email", body="正文", subject="主题X")
+    assert "主题：主题X" in r.save_text()
+    assert "正文" in r.save_text()
+    r2 = GreetingResult(channel="boss", body="打招呼", attachment_note="截图配文")
+    assert "截图配文" in r2.save_text()

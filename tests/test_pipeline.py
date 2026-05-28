@@ -236,8 +236,10 @@ def test_greeting_stage_skips_when_no_template(mock_cfg):
 @patch("jobpilot.ai.greeting.generate_greeting")
 @patch("jobpilot.ai.greeting._load_greeting_config")
 def test_greeting_stage_writes_files(mock_cfg, mock_gen, tmp_path):
+    from jobpilot.ai.greeting import GreetingResult
+
     mock_cfg.return_value = {"base_template": "intro {hook} end"}
-    mock_gen.return_value = "您好，这是一条打招呼话术"
+    mock_gen.return_value = GreetingResult(channel="boss", body="您好，这是一条打招呼话术")
     job = MagicMock(job_id="j1", company="字节", title="AI产品")
     db = MagicMock()
     db.list_top_scored_jobs.return_value = [(MagicMock(), job)]

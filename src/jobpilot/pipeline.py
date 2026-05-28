@@ -238,9 +238,9 @@ def _greeting_stage(db: JobPilotDB, cfg: PipelineConfig) -> tuple[StageResult, i
     errors: list[str] = []
     for score_obj, job in pairs:
         try:
-            text = generate_greeting(job, score_obj)
+            result = generate_greeting(job, score_obj, channel="boss")
             path = config.GREETINGS_DIR / _greeting_filename(job.company, job.title)
-            path.write_text(text, encoding="utf-8")
+            path.write_text(result.save_text(), encoding="utf-8")
             success += 1
         except GreetingError as exc:
             errors.append(f"{job.company}:{exc}")
