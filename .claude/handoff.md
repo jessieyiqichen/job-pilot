@@ -41,7 +41,8 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - [x] Phase 16: 面试准备生成器（高分岗+简历 → 面试题+STAR 要点）— #3 完成
 - [~] Phase 17: #4 反馈驱动评分校准
   - [x] 17a: `jobpilot eval` 打分一致性度量（eval.py，precision/recall/F1）— 底座完成
-  - [ ] 17b: 校准（调权重）— **gated：需要真实标签**（0 投递记录 + 无标注文件），无数据不硬调。下一步给用户做标注入口（交互式 label 或预填模板）
+  - [x] 17b: 交互式标注入口 `jobpilot label`（y/n/s/q 写 eval_labels.json）— 解锁 eval 的 ground truth
+  - [ ] 17c: 真正的权重校准（调 scorer 权重让指标变好）— 现在已解锁（用户跑 jobpilot label 标够样本后即可做）。需先攒一批标签再动手
 - [ ] 待用户：定时器装上（填 .env SMTP + 给时间 → launchctl load + 测试邮件）
 
 ## Review 备注
@@ -184,6 +185,19 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 **17b 校准 gated**：当前 0 投递 + 无标注文件 → 无 ground truth。下一步需先做"标注入口"（交互式 label 命令 or 预填高/中/低分岗模板让用户快速标 1/0），有了标签 eval 才能跑、校准才有依据。未在无数据时硬造校准逻辑（避免过度工程）。
 
 **已为用户打开**：Anthropic Console API Keys 页（console.anthropic.com/settings/keys）供取 ANTHROPIC_API_KEY 填 .env。
+
+### #4 第二步：交互式标注 jobpilot label Phase 17b（2026-05-28）
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/eval.py` | 加 read_labels_file / write_labels_file（排序稳定 diff，truthy 强转 1/0） |
+| `src/jobpilot/cli.py` | 新增 label 命令：逐个岗位 y/n/s/q 标注，跳过已标过的，q 保存退出，merge 写回 |
+| `tests/test_cli_label.py` | +6 测试（文件 roundtrip + 交互流 via CliRunner input） |
+
+**测试**：327 → 333（+6），全过。真实端到端：标 4 个高分岗(y/n/y/n)→eval 算出 TP=2/FP=2，precision 50% 并触发"调阈值/权重"诊断。✅ 闭环可用。
+
+**17c 校准下一步建议**：用户先 `jobpilot label` 标 30-50 个（含高/中/低分），跑 `jobpilot eval` 看基线 precision/recall；若 precision 低→scorer 权重偏高估，调 ai/scorer.py 维度权重或 role_fit cap，改完再 eval 对比。校准应是"调-测-对比"循环，由真实指标驱动。
 
 ### 新一轮XHS搜索（2026-05-06）
 

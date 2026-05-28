@@ -96,6 +96,27 @@ def load_labels(
     return labels
 
 
+def read_labels_file(labels_path: str = DEFAULT_LABELS_PATH) -> dict[str, int]:
+    """Read only the manual labels file (no application-derived labels)."""
+    path = Path(labels_path)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Failed to parse labels file %s: %s", labels_path, e)
+        return {}
+    return {str(k): (1 if v else 0) for k, v in data.items()}
+
+
+def write_labels_file(labels: dict[str, int], labels_path: str = DEFAULT_LABELS_PATH) -> None:
+    """Persist labels to the JSON file (sorted for stable diffs)."""
+    path = Path(labels_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ordered = {k: labels[k] for k in sorted(labels)}
+    path.write_text(json.dumps(ordered, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def evaluate(
     db: JobPilotDB,
     labels: dict[str, int],
