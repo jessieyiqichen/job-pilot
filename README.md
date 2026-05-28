@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![Claude API](https://img.shields.io/badge/Claude-API-D97757?logo=anthropic&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-346%20passing-3FB950)
+![Tests](https://img.shields.io/badge/tests-391%20passing-3FB950)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 AI-powered job hunting assistant for Chinese recruitment platforms.
@@ -17,12 +17,14 @@ Not a scraper — an intelligent layer on top of existing tools: AI matching, re
 ## What it does
 
 - **Resume parsing** — PDF/DOCX to structured profile via Claude API
-- **Multi-channel search** — WebSearch (default) + Xiaohongshu (search & favorites import) + Boss (via boss-cli)
-- **AI scoring** — Multi-dimensional 1-10 matching with preference weighting; two-pass strategy (free heuristic pre-screen + API refine on top N)
+- **Multi-channel search** — WebSearch (default) + Xiaohongshu (search & favorites import) + GitHub hiring issues (official Search API) + Boss (via boss-cli)
+- **AI scoring** — Multi-dimensional 1-10 matching with preference weighting; two-pass strategy (free heuristic pre-screen + API refine on top N); company blacklist + headhunter down-ranking
 - **Resume tailoring** — Proficiently methodology + original docx patching (preserves fonts & layout); skills whitelist prevents AI inflation
-- **One-command pipeline** — `pipeline-all` runs search → score → tailor → report end to end; each stage is isolated so one dead channel never aborts the rest
+- **One-command pipeline** — `pipeline-all` runs search → score → tailor → greeting → report end to end; each stage is isolated so one dead channel never aborts the rest
 - **Daily digest + email** — Surfaces only newly-discovered high-score jobs and stale-application follow-ups; optional local scheduling (launchd) + SMTP delivery
 - **Interview prep** — Likely questions per job mapped to STAR talking points grounded in your real resume
+- **Greeting messages** — Channel-specific opening messages (Boss / Xiaohongshu / email) from a configurable style guide; you send them yourself
+- **Strategy advisor & Q&A** — `advisor` diagnoses your real funnel for weekly actions; `ask` answers job-search questions grounded in your situation
 - **Eval-driven scoring** — `label` + `eval` measure agreement (precision/recall/F1) between AI scores and your own apply/skip decisions
 - **Web dashboard** — Next.js board: job cards, funnel chart, score distribution
 - **Graceful degradation** — Heuristic scoring + prompt export when no API key
@@ -48,22 +50,26 @@ JobPilot is a **local, read-first, user-triggered** assistant. Deliberate bounda
 ## Architecture
 
 ```
-JobPilot CLI (20 commands)
-    ├── pipeline.py    — End-to-end orchestration (search→score→tailor→report), per-stage isolation
+JobPilot CLI (24 commands)
+    ├── pipeline.py    — End-to-end orchestration (search→score→tailor→greeting→report), per-stage isolation
     │
     ├── AI Layer (Claude API)
     │   ├── parser.py    — Resume → structured JSON
     │   ├── scorer.py    — Multi-dim scoring + heuristic fallback
     │   ├── tailor.py    — Proficiently methodology + docx patch
-    │   └── interview.py — Interview questions + STAR talking points
+    │   ├── interview.py — Interview questions + STAR talking points
+    │   ├── greeting.py  — Channel-specific HR opening messages
+    │   ├── advisor.py   — Funnel diagnosis + weekly actions
+    │   └── ask.py       — Situation-grounded job-search Q&A
     │
     ├── Adapter Layer
-    │   ├── websearch.py  — Anthropic web_search tool (default)
-    │   ├── xhs_search.py — Xiaohongshu search via rednote-mcp + AI extraction
-    │   ├── xhs.py        — Xiaohongshu favorites (parse-only)
-    │   └── boss.py       — Boss (subprocess → boss-cli)
+    │   ├── websearch.py   — Anthropic web_search tool (default)
+    │   ├── xhs_search.py  — Xiaohongshu search via rednote-mcp + AI extraction
+    │   ├── xhs.py         — Xiaohongshu favorites (parse-only)
+    │   ├── github_jobs.py — GitHub hiring issues + 谁在招人 thread comments (official API)
+    │   └── boss.py        — Boss (subprocess → boss-cli)
     │
-    ├── eval.py / notify.py / report.py — Scoring eval, SMTP digest, Markdown report
+    ├── filters.py / eval.py / notify.py / report.py — Blacklist filter, scoring eval, SMTP digest, report
     │
     ├── Data Layer (SQLite, WAL, 4 tables)
     │   ├── profiles · jobs · job_scores · applications
@@ -92,18 +98,20 @@ jobpilot apply                         # 5. mark applied (human-in-the-loop)
 |---------|-------------|
 | `setup` | Interactive preference questionnaire |
 | `resume <path>` | Parse resume into profile |
-| `search <query> --platform <websearch\|xhs\|boss>` | Search jobs via adapters |
+| `search <query> --platform <websearch\|xhs\|github\|boss>` | Search jobs via adapters |
 | `score [--heuristic] [--refine N]` | AI score (two-pass: heuristic + API refine) |
 | `list [--min-score N]` | List jobs with scores |
 | `detail <job_id>` | Job details + score breakdown |
 | `status <job_id> <status>` | Update application status |
 | `tailor <job_id>` / `--top N` / `--from-text <file>` | Tailor resume (single / batch / import) |
-| `interview <job_id> [-o file.md]` | Generate interview prep |
-| `greeting <job_id>` | Generate a personalized opening message for the HR (you send it) |
+| `interview <job_id> [-o file.md]` | Generate interview prep (questions + STAR points) |
+| `greeting <job_id> [-c boss\|xhs\|email]` | Channel-specific opening message for the HR (you send it) |
+| `advisor` | Strategy advisor — diagnoses your real funnel and gives this week's actions |
+| `ask "<question>"` | Job-search Q&A grounded in your situation + preferences |
 | `import-xhs <json> [--score]` | Import Xiaohongshu favorites |
 | `apply` | Interactive batch apply |
 | `pipeline` | Funnel statistics |
-| `pipeline-all [--email] [--platforms ...]` | Full automation: search→score→tailor→report |
+| `pipeline-all [--email] [--platforms ...] [--greeting N]` | Full automation: search→score→tailor→greeting→report |
 | `digest [--email]` | Preview/send daily digest |
 | `label [--min-score N]` | Interactively label jobs (apply/skip) for eval |
 | `eval [--threshold N]` | Measure AI-score agreement (precision/recall/F1) |
@@ -178,7 +186,7 @@ JobPilot works without an API key:
 ## Tests
 
 ```bash
-python -m pytest tests/   # 333 tests
+python -m pytest tests/   # 391 tests
 ```
 
 ## License
