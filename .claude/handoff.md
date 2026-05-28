@@ -43,6 +43,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 29: chat 记忆跨 session 持久化（chat_store.py：load/save/clear_history per-profile JSON 存 data/chats/[gitignored]，原子写，malformed 容错丢弃；run_chat resume=True 默认接续历史，全量存盘+滑动窗口 CHAT_MAX_CONTEXT_MESSAGES(30) 喂 API 控 token；--new 重开）（05-28，428 tests）。真实跨进程烟测：第二次重启准确记起第一次说的"成长空间>薪资"
 - Phase 30: 军师主动跟进 followup（followup.py：Commitment(frozen)+extract_commitments[LLM 从对话提取行动意图,JSON]+reconcile_with_applications[投了的自动闭环,确定性]；followup_store.py JSON 持久化；chat 集成：退出自动提取承诺存盘+开场主动提 open 承诺并注入 system；jobpilot followup 命令[列出/--done/--drop]）（05-28，452 tests）。真实端到端：聊"这周投字节+改简历"→退出记下2件→下次开场主动问"做了吗"，直击 0 投递断点
 - Phase 31: 认知军师——接入 Nous 认知模型（跨项目集成 cognitive.py：读 ../nous/data/subjects/jessie/cognitive_model_v2.json[9维认知建模]，format_cognitive_prompt 带使用守则[不贴标签/不诊断人格/帮建框架+允许good-enough]；注入 chat/advisor/ask 的 prompt；缺文件优雅降级；COGNITIVE_MODEL_PATH env 可配）（05-28，459 tests）。真实验证：advisor 对 0 投递的诊断从"先投起来"升级为"收敛了标准但没给启动许可"[命中决策架构+高标准盲区]，给 45 分钟倒计时+good-enough 框架，未越界念模型
+- Phase 33: 面试作品集叙事（用户要拿项目去面试展示[产品岗]，需要可讲的框架而非更多功能）：docs/CASE_STUDY.md[真问题→行为层vs认知层洞察→关键产品决策与取舍表→三层架构→结果→诚实边界] + docs/INTERVIEW_SCRIPT.md[30秒/2分钟讲述 + 7 个追问应对 + demo 演示路径] + Web /product-thinking 页[核心洞察+决策卡片+诚实边界] + NavBar"产品思考"入口（05-28）→ 已部署 https://web-ten-omega-72.vercel.app/product-thinking
 - Phase 32: 语言风格 voice 闭环（voice.py：VoiceSample[manual/revised/chat]+per-profile JSON 持久化[data/voice/ gitignored]+build_voice_block few-shot 块；greeting build_hook_prompt/build_email_prompt 加 voice 参数注入真实文本范例；jobpilot voice 命令[add/--file/--revised/--list]，冷启动手动加+改后回灌统一入口）（05-28，472 tests）。辨析：Nous 是认知层不解决表达层；few-shot 真实范例 > 抽象风格描述；"每次改话术"的改后版本=最好范例。真实验证：加口语样本后 greeting 钩子句明显更像本人口语
 
 ## 关键数据
@@ -86,6 +87,23 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 面试作品集叙事 Phase 33（2026-05-28）
+
+**背景转向**：用户透露真实诉求——没时间自己试投了，要把项目当**面试作品**（产品岗）拿去讲，需要的是「思路和框架」而非更多功能。方向从"加功能"转为"做叙事资产"。
+
+**判断**：面试官（产品岗）最吃「你做了哪些取舍、为什么」=judgment，而这项目的取舍很有想法但散落各处。下一步=把已有的东西组织成可讲的框架，不是写代码。
+
+**交付（3 件，从 case study 内核派生）**：
+| 文件 | 内容 |
+|------|------|
+| `docs/CASE_STUDY.md` | 真问题→核心洞察(行为层→认知层)→关键产品决策与取舍表(8 条)→三层架构(数据/个性/陪伴 + 声明vs推断分工)→结果→诚实边界(多用户冷启动思路) |
+| `docs/INTERVIEW_SCRIPT.md` | 30 秒电梯版 + 2 分钟故事线 + 7 个高频追问应对(区别/认知模型靠谱吗/规模化/为何不用AI算plan/为何不自动投递/最难点/怎么验证) + demo 演示路径 |
+| `web/app/product-thinking/page.tsx` | demo 加「产品思考」页：核心洞察 + 6 张决策卡片 + 诚实边界；NavBar 加入口 |
+
+**部署**：npm build 通过(1056 静态页)，vercel --prod 部署，https://web-ten-omega-72.vercel.app/product-thinking HTTP 200 内容齐。
+
+**叙事内核**（贯穿三件）：①真问题在人不在信息（0投递/话术每次改）②行为层→认知层是差异化灵魂③关键取舍体现 judgment（不自动投递/确定性vs LLM/不急多用户/voice few-shot）④诚实边界=多用户冷启动用"渐进式深度"解，刻意不急通用化⑤护城河=陪你三个月攒的理解抄不走。**无代码功能改动，纯文档+1 静态页。**
 
 ### 语言风格 voice 闭环 Phase 32（2026-05-28）
 

@@ -37,6 +37,12 @@ function NavBar() {
             求职军师
           </Link>
           <Link
+            href="/product-thinking"
+            className="text-[14px] text-gray-500 transition-colors hover:text-gray-900"
+          >
+            产品思考
+          </Link>
+          <Link
             href="/how-it-works"
             className="text-[14px] text-gray-500 transition-colors hover:text-gray-900"
           >
