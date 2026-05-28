@@ -12,6 +12,21 @@ from pathlib import Path
 # Paths
 # ============================================================
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # job-pilot/
+
+# Load secrets from .env (gitignored) so the CLI works without exporting vars.
+# Only fills in vars that are missing OR blank in the real environment — a real
+# exported value always wins, but an empty env var (common gotcha) won't block .env.
+try:
+    from dotenv import dotenv_values
+
+    _env_path = BASE_DIR / ".env"
+    if _env_path.exists():
+        for _k, _v in dotenv_values(_env_path).items():
+            if _v and not os.environ.get(_k):
+                os.environ[_k] = _v
+except ImportError:  # python-dotenv optional; env vars still work
+    pass
+
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "jobpilot.db"
 RESUMES_DIR = DATA_DIR / "resumes"
