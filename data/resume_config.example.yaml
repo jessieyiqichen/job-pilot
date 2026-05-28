@@ -48,6 +48,16 @@ preferences:
   blacklist_companies: []          # e.g. ["某外包", "XX科技"]
   filter_headhunter: true          # soft-down-rank 猎头/代招 reposts to <=4.0
 
+# Greeting (打招呼话术): fixed self-intro template + per-JD hook from your products.
+# {hook} is replaced by an LLM-generated hook clause (no trailing punctuation).
+greeting:
+  base_template: "您好，我是<姓名>，<学校/学历一句话>，今年可全职到岗，可实习三个月以上。我对 AI 产品很感兴趣，独立做过 <产品同位语，如：认知工具 Nous、数据平台 MusiClaw>。{hook}，希望能进一步沟通。"
+  products:
+    - name: JobPilot
+      desc: 多渠道求职 Agent           # 注意用同位语，别用括号注释
+      use_for: 招聘 / Agent / 多 Agent 方向
+      hook_detail: 用多个 Agent 分工完成搜岗、打分、定制简历，我负责定流程和判断标准
+
   # Role fit — controls how well different job types match your goals
   # strong_match: score × 1.0, good_match: score × 0.7, weak_match: score × 0.3 + cap at 5.0
   # Omit this section to disable role fit scoring

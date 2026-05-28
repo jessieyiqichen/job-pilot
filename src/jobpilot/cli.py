@@ -568,23 +568,20 @@ def interview(
 @app.command()
 def greeting(
     job_id: str = typer.Argument(..., help="Job ID"),
-    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
     output: str = typer.Option("", "--output", "-o", help="保存到文件"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """为指定岗位生成给 HR 的打招呼开场白（你来发，不自动触达）。"""
+    """为指定岗位生成个人风格打招呼话术（固定自我介绍 + 按 JD 动态钩子；你来发）。"""
     _setup_logging(verbose)
     from jobpilot.ai.greeting import (
         GreetingError,
-        build_greeting_prompt,
+        build_hook_prompt,
+        check_style_violations,
         generate_greeting,
+        _load_greeting_config,
     )
 
     db = _get_db()
-    profile = db.get_profile(profile_id)
-    if not profile:
-        console.print("[red]No profile found. Run 'jobpilot resume <file>' first.[/red]")
-        raise typer.Exit(1)
     job = db.get_job(job_id)
     if not job:
         console.print(f"[red]Job not found: {job_id}[/red]")
@@ -592,22 +589,28 @@ def greeting(
     score = db.get_score(job_id)
 
     if not config.ANTHROPIC_API_KEY:
-        prompt = build_greeting_prompt(profile, job, score)
-        console.print("[yellow]未配置 API key，导出 prompt 供 Claude.ai 手动使用：[/yellow]\n")
+        gcfg = _load_greeting_config()
+        prompt = build_hook_prompt(job.jd_text or "", gcfg.get("products", []) or [])
+        console.print("[yellow]未配置 API key，导出钩子 prompt 供 Claude.ai 生成：[/yellow]\n")
         console.print(prompt)
+        console.print("\n[dim]把生成的钩子填进 resume_config.yaml 的 base_template {hook} 处[/dim]")
         return
 
-    console.print(f"为 [bold]{job.title}[/bold] @ {job.company} 生成打招呼语...\n")
+    console.print(f"为 [bold]{job.title}[/bold] @ {job.company} 生成打招呼话术...\n")
     try:
-        text = generate_greeting(profile, job, score)
+        text = generate_greeting(job, score)
     except GreetingError as e:
         console.print(f"[red]生成失败: {e}[/red]")
         raise typer.Exit(1)
 
-    console.print(f"[green]{text}[/green]")
+    console.print(f"[green]{text}[/green]\n")
+    console.print(f"[dim]字数: {len(text)}{'（超过 300）' if len(text) > 300 else ''}[/dim]")
+    violations = check_style_violations(text, job.jd_text or "")
+    if violations:
+        console.print("[yellow]风格自检发现问题（建议手改）: " + "; ".join(violations) + "[/yellow]")
     if output:
         Path(output).expanduser().write_text(text, encoding="utf-8")
-        console.print(f"\n[dim]已保存: {output}[/dim]")
+        console.print(f"[dim]已保存: {output}[/dim]")
     console.print("[dim]复制后到平台手动发给 HR（JobPilot 不自动触达招聘方）[/dim]")
 
 
