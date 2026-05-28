@@ -142,11 +142,16 @@ _HOOK_RULES = """\
 
 
 def build_hook_prompt(
-    jd_text: str, products: list[dict], channel_cfg: dict, formality: str
+    jd_text: str, products: list[dict], channel_cfg: dict, formality: str, voice: str = ""
 ) -> str:
-    """Hook prompt for boss/xhs (fixed intro + this hook). Pure, testable."""
+    """Hook prompt for boss/xhs (fixed intro + this hook). Pure, testable.
+
+    `voice` is an optional few-shot block of the user's real writing (see
+    voice.py) so the hook comes out in their voice and needs less rewriting.
+    """
     max_chars = channel_cfg.get("hook_max_chars", 110)
     tone = channel_cfg.get("tone", "")
+    voice_block = f"\n{voice}\n" if voice else ""
     return f"""\
 你在为求职者写打招呼话术里的「钩子句」。自我介绍是固定的，你**只写钩子句**。
 
@@ -160,7 +165,7 @@ def build_hook_prompt(
 
 ## 本渠道语气
 {tone}
-
+{voice_block}
 ## 输出
 只输出钩子句正文，第一人称，**只讲一个产品、不超过 {max_chars} 字**。
 不要句尾标点（后面会自动接"，希望能进一步沟通。"）。不要解释、标题或引号。
@@ -169,9 +174,13 @@ def build_hook_prompt(
 
 def build_email_prompt(
     jd_text: str, job_title: str, company: str, products: list[dict],
-    intro_facts: str, structure: str, formality: str,
+    intro_facts: str, structure: str, formality: str, voice: str = "",
 ) -> str:
-    """Email body prompt — formal, structured, facts pinned. Pure, testable."""
+    """Email body prompt — formal, structured, facts pinned. Pure, testable.
+
+    `voice` is an optional few-shot block of the user's real writing.
+    """
+    voice_block = f"\n{voice}\n" if voice else ""
     return f"""\
 你在为求职者写一封**求职邮件正文**（不含主题行和落款，那两部分会自动加）。
 
@@ -196,7 +205,7 @@ def build_email_prompt(
 {_AVOID_LINE}
 - 相关经历只讲一个产品、落到具体行为，不堆数据不写三段排比
 - 第一人称，体现判断逻辑
-
+{voice_block}
 ## 输出
 只输出邮件正文（从称谓到"期待与您进一步沟通"这类结尾），不要主题行、不要落款签名、不要解释。
 """
@@ -272,6 +281,11 @@ def generate_greeting(
     if not config.ANTHROPIC_API_KEY:
         raise GreetingError("未配置 ANTHROPIC_API_KEY，无法生成话术。")
 
+    # Few-shot the user's real writing so the output sounds like them, not AI.
+    from jobpilot.voice import build_voice_block, load_samples
+
+    voice = build_voice_block(load_samples())
+
     if channel == "email":
         base_template = gcfg.get("base_template", "")
         if not base_template:
@@ -281,7 +295,7 @@ def generate_greeting(
         body = _call_llm(
             build_email_prompt(
                 job.jd_text or "", job.title, job.company, products,
-                intro_facts, ch.get("structure", ""), formality,
+                intro_facts, ch.get("structure", ""), formality, voice,
             ),
             max_tokens=1200,
         )
@@ -294,7 +308,9 @@ def generate_greeting(
     base_template = gcfg.get("base_template", "")
     if not base_template:
         raise GreetingError("resume_config.yaml 缺少 greeting.base_template。")
-    hook = _call_llm(build_hook_prompt(job.jd_text or "", products, ch, formality), max_tokens=600)
+    hook = _call_llm(
+        build_hook_prompt(job.jd_text or "", products, ch, formality, voice), max_tokens=600
+    )
     body = compose_greeting(base_template, hook)
     attachment_note = ch.get("attachment_note", "") if channel == "boss" else ""
     return GreetingResult(channel=channel, body=body, attachment_note=attachment_note)

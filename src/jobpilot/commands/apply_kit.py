@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from jobpilot import cli
+from jobpilot import cli, config
 from jobpilot.cli import _setup_logging, app, console
 from jobpilot.db import JobPilotDB
 
@@ -251,3 +251,45 @@ def pdf(
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
+
+
+@app.command()
+def voice(
+    text: str = typer.Argument("", help="一段你的真实文字（话术/文案），作为语言风格样本"),
+    file: str = typer.Option("", "--file", "-f", help="从文件读入样本"),
+    revised: bool = typer.Option(False, "--revised", help="标记为「改后回灌」样本（你改完话术后回灌）"),
+    profile_id: int = typer.Option(config.DEFAULT_PROFILE_ID, "--profile", "-p", help="Profile ID"),
+    list_only: bool = typer.Option(False, "--list", "-l", help="列出已有样本"),
+) -> None:
+    """语言风格样本：军师生成话术时会模仿这些你的真实文字，让你少改。
+
+    冷启动先贴几段你满意的话术；以后改完话术用 --revised 回灌，越用越像你。
+    """
+    from jobpilot.voice import VoiceSample, add_sample, load_samples
+
+    if list_only or (not text and not file):
+        samples = load_samples(profile_id)
+        if not samples:
+            console.print(
+                '还没有语言样本。用 jobpilot voice "<你的真实话术>" 加几段，'
+                "军师生成话术时就会学你的语气。"
+            )
+            return
+        console.print(f"语言样本（{len(samples)} 条）：")
+        for i, s in enumerate(samples, 1):
+            preview = s.text[:60] + ("…" if len(s.text) > 60 else "")
+            console.print(f"  {i}. [{s.source}] {preview}")
+        return
+
+    content = text
+    if file:
+        content = Path(file).expanduser().read_text(encoding="utf-8").strip()
+    if not content:
+        console.print("[red]样本内容为空。[/red]")
+        raise typer.Exit(1)
+
+    sample = VoiceSample.new(content, source="revised" if revised else "manual")
+    if add_sample(profile_id, sample):
+        console.print(f"[green]已加入语言样本（{sample.source}）。下次生成话术会模仿你的语气。[/green]")
+    else:
+        console.print("[yellow]这段样本已存在，跳过。[/yellow]")

@@ -33,9 +33,10 @@ RESUMES_DIR = DATA_DIR / "resumes"
 TAILORED_DIR = DATA_DIR / "tailored"
 GREETINGS_DIR = DATA_DIR / "greetings"
 CHATS_DIR = DATA_DIR / "chats"
+VOICE_DIR = DATA_DIR / "voice"
 
 # Ensure directories exist
-for _d in (DATA_DIR, RESUMES_DIR, TAILORED_DIR, GREETINGS_DIR, CHATS_DIR):
+for _d in (DATA_DIR, RESUMES_DIR, TAILORED_DIR, GREETINGS_DIR, CHATS_DIR, VOICE_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ============================================================

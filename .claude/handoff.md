@@ -43,6 +43,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 29: chat 记忆跨 session 持久化（chat_store.py：load/save/clear_history per-profile JSON 存 data/chats/[gitignored]，原子写，malformed 容错丢弃；run_chat resume=True 默认接续历史，全量存盘+滑动窗口 CHAT_MAX_CONTEXT_MESSAGES(30) 喂 API 控 token；--new 重开）（05-28，428 tests）。真实跨进程烟测：第二次重启准确记起第一次说的"成长空间>薪资"
 - Phase 30: 军师主动跟进 followup（followup.py：Commitment(frozen)+extract_commitments[LLM 从对话提取行动意图,JSON]+reconcile_with_applications[投了的自动闭环,确定性]；followup_store.py JSON 持久化；chat 集成：退出自动提取承诺存盘+开场主动提 open 承诺并注入 system；jobpilot followup 命令[列出/--done/--drop]）（05-28，452 tests）。真实端到端：聊"这周投字节+改简历"→退出记下2件→下次开场主动问"做了吗"，直击 0 投递断点
 - Phase 31: 认知军师——接入 Nous 认知模型（跨项目集成 cognitive.py：读 ../nous/data/subjects/jessie/cognitive_model_v2.json[9维认知建模]，format_cognitive_prompt 带使用守则[不贴标签/不诊断人格/帮建框架+允许good-enough]；注入 chat/advisor/ask 的 prompt；缺文件优雅降级；COGNITIVE_MODEL_PATH env 可配）（05-28，459 tests）。真实验证：advisor 对 0 投递的诊断从"先投起来"升级为"收敛了标准但没给启动许可"[命中决策架构+高标准盲区]，给 45 分钟倒计时+good-enough 框架，未越界念模型
+- Phase 32: 语言风格 voice 闭环（voice.py：VoiceSample[manual/revised/chat]+per-profile JSON 持久化[data/voice/ gitignored]+build_voice_block few-shot 块；greeting build_hook_prompt/build_email_prompt 加 voice 参数注入真实文本范例；jobpilot voice 命令[add/--file/--revised/--list]，冷启动手动加+改后回灌统一入口）（05-28，472 tests）。辨析：Nous 是认知层不解决表达层；few-shot 真实范例 > 抽象风格描述；"每次改话术"的改后版本=最好范例。真实验证：加口语样本后 greeting 钩子句明显更像本人口语
 
 ## 关键数据
 
@@ -85,6 +86,28 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 语言风格 voice 闭环 Phase 32（2026-05-28）
+
+**需求**：用户说军师生成的话术每次都要改，因为不懂她的语言/表达习惯。问 Nous 能否解决/新建功能/从聊天捕捉。
+
+**辨析（关键）**：①Nous 是认知层（怎么想），故意不碰表达层（怎么说），**不直接解决**；但其对话语料是真实语言样本可借。②最有效的不是"描述风格"，是**给真实范例 few-shot**（实证 > 形容词）。③"每次改话术"是金矿——改后版本=最好范例，回灌即可。用户选「手动给真实样本」冷启动。
+
+**方案：voice 闭环三件套** = 冷启动手动样本 + 改后回灌(flywheel) + 生成时 few-shot。统一入口 `jobpilot voice`。
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/voice.py` | 新建。VoiceSample(frozen, source=manual/revised/chat) + per-profile JSON 持久化(load/save/add 去重) + build_voice_block(取最近 N 个做 few-shot，带"模仿别用AI腔"指令) |
+| `src/jobpilot/config.py` | 新增 VOICE_DIR（data/voice/）|
+| `src/jobpilot/ai/greeting.py` | build_hook_prompt/build_email_prompt 加 voice 参数注入；generate_greeting load_samples+build_voice_block 传入 |
+| `src/jobpilot/commands/apply_kit.py` | 新增 voice 命令（位置参数 text / --file / --revised / --list）|
+| `.gitignore` | data/voice/ |
+| `tests/test_voice.py`(+8) + `test_cli_voice.py`(+5) | +13 测试 |
+
+**测试**：459 → 472（+13），全过。**真实对比验证**：加一条口语样本后，同一岗位 boss greeting 钩子句从工程腔（"设计过多个Agent分工协作...定了判断标准"）变得更口语（"我之前做过一个认知建模工具Nous，就是从...抽认知信号"）。区别温和（自我介绍固定+只钩子受影响+单样本），回灌越多越像。
+
+**用法**：`jobpilot voice "<满意的真实话术>"` 冷启动；改完话术 `jobpilot voice "<改后版本>" --revised` 回灌；`jobpilot voice --list` 查看。**可选后续**：①voice 也接 tailor（简历 bullet）②greeting 命令加 --save-revised 直接回灌当前输出的修改 ③从 chat 历史自动抽 voice 样本（source=chat flywheel）。
 
 ### 认知军师：接入 Nous 认知模型 Phase 31（2026-05-28）
 
