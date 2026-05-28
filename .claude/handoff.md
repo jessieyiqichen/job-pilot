@@ -34,6 +34,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 21: greeting 接入 pipeline-all（第 5 个 stage _greeting_stage，对 top N 高分岗生成话术存 data/greetings/，--greeting N 控制，缺模板优雅跳过）（05-28，353 tests）
 - Phase 22: greeting 渠道差异化 + 可配置 style guide（boss短+截图配文/xhs自然/email正式带主题+签名；formality 正式度校准；interaction_rules HR互动规则；全在 resume_config.yaml greeting 段，改偏好只动配置）（05-28，354 tests）
 - Phase 23: GitHub 招聘渠道适配器（adapters/github_jobs.py，gh search issues 官方API+AI抽取，合规不爬；接入 search/pipeline；broaden_query 去 job-type/城市词防 AND 过窄）（05-28，362 tests）。⚠️ 通用 issue 搜索低产（实测净抓 1 条）——ruanyf/weekly 岗位在评论里搜不到；提产需做评论抽取（用户已 defer）
+- Phase 24: 策略诊断军师 advisor（advisor.py：诊断层 diagnose 确定性算 6 信号[漏斗/高分岗缺口/停滞/定制覆盖/投递节奏/数据量门槛]+建议层 generate_advice LLM 翻人话，无 key 降级导出 prompt；诚实护栏：投递<ADVISOR_MIN_APPLICATIONS(5) 时改口"先投起来"不硬编转化分析）+ jobpilot advisor 命令 + db.count_jobs_by_status（05-28，378 tests）
 
 ## 关键数据
 
@@ -76,6 +77,31 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 策略诊断军师 Phase 24（2026-05-28）
+
+**需求**：用户想把 agent 从"找岗位+面试准备"升级成"求职军师"（策略/计划/答疑/情绪支持）。澄清后选「策略诊断军师」这一刀——护城河最强，因为建立在用户独有的真实求职数据上，不是套壳 ChatGPT。
+
+**核心设计：两层拆分**
+- 诊断层 `diagnose()` — 纯确定性数据计算，无 LLM，可测，每个数字 trace 回 DB。这是"扛得住面试官追问"的关键。
+- 建议层 `generate_advice()` — 把诊断喂 LLM 翻成人话建议；无 API key 降级导出 prompt（沿用 interview/tailor 模式）。
+
+**6 个诊断信号**：漏斗各环计数 / 高分岗缺口（≥7分共几个 vs 已投几个 vs 已定制几个）/ 停滞投递 / 投递节奏（近 N 天）/ 回音分布 / **数据量诚实护栏**（投递 < ADVISOR_MIN_APPLICATIONS 时 headline 改口"先投起来"，不硬编转化故事）。headline 是规则派生，不靠 LLM。
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/advisor.py` | 新建。FunnelStage/StrategyDiagnosis（frozen）+ diagnose + format_diagnosis_markdown（规则展示，无 API 可用）+ build_advisor_prompt + generate_advice（API，无 key 抛 AdvisorError） |
+| `src/jobpilot/db.py` | 新增 count_jobs_by_status()（一次 GROUP BY） |
+| `src/jobpilot/config.py` | 新增 ADVISOR_MIN_APPLICATIONS(5) / ADVISOR_PACE_DAYS(7)，env 可覆盖 |
+| `src/jobpilot/cli.py` | 新增 advisor 命令：诊断永远先出→无 key 附导出 prompt / 有 key 出 LLM 建议 |
+| `tests/test_advisor.py` + `tests/test_cli_advisor.py` | +16 测试 |
+
+**测试**：362 → 378（+16），全过（3.4s）。真实 DB 烟测：profile 10 当前 0 投递→军师正确输出"37 个高分岗在等，先投起来"，护栏生效未瞎编漏斗分析。
+
+**⚠️ 遗留**：cli.py 已 1214 行，超 800 行上限（接手时已 1098+，本次 +58 加重）。需独立拆分（参考 Phase 5 把 setup 抽到 setup.py 的做法），不在本 feature 内做以免 bloat。
+
+**下一步建议（军师后续刀）**：当前只做了"策略诊断"切片。完整军师还差 ①对话答疑 jobpilot ask（结合数据回答 offer/薪资/HR 问题）②投递计划编排（高分岗排序+follow-up 时间表，与 advisor 有重叠可合并）。情绪支持不单独做，已体现在 headline/advice 的语气规则里。
 
 ### 全流程自动化 + 偏好持久化（2026-05-27）
 

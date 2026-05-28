@@ -572,6 +572,64 @@ def interview(
 
 
 @app.command()
+def advisor(
+    profile_id: int = typer.Option(config.DEFAULT_PROFILE_ID, "--profile", "-p", help="Profile ID"),
+    output: str = typer.Option("", "--output", "-o", help="保存到 Markdown 文件"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """求职策略军师：诊断你的真实求职数据，给本周可执行建议。"""
+    _setup_logging(verbose)
+    from jobpilot.advisor import (
+        AdvisorError,
+        build_advisor_prompt,
+        diagnose,
+        format_diagnosis_markdown,
+        generate_advice,
+    )
+
+    db = _get_db()
+    profile = db.get_profile(profile_id)
+    if not profile:
+        console.print("[red]No profile found. Run 'jobpilot resume <file>' first.[/red]")
+        raise typer.Exit(1)
+
+    d = diagnose(db, profile_id)
+    # Deterministic diagnosis first — it works with zero API access.
+    diag_md = format_diagnosis_markdown(d)
+    console.print(diag_md)
+
+    # No API key: export the prompt for a manual Claude.ai workflow.
+    if not config.ANTHROPIC_API_KEY:
+        prompt = build_advisor_prompt(d, profile)
+        console.print(
+            "[yellow]未配置 API key，以上为规则诊断；导出军师 prompt 供 Claude.ai：[/yellow]\n"
+        )
+        if output:
+            Path(output).expanduser().write_text(
+                diag_md + "\n\n---\n\n" + prompt, encoding="utf-8"
+            )
+            console.print(f"[green]已保存: {output}[/green]")
+        else:
+            console.print(prompt)
+        return
+
+    console.print("生成军师建议...")
+    try:
+        advice = generate_advice(d, profile)
+    except AdvisorError as e:
+        console.print(f"[red]生成失败: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print(advice)
+    if output:
+        Path(output).expanduser().write_text(
+            diag_md + "\n\n## 军师建议\n\n" + advice, encoding="utf-8"
+        )
+        console.print(f"[green]已保存: {output}[/green]")
+
+
+@app.command()
 def greeting(
     job_id: str = typer.Argument(..., help="Job ID"),
     channel: str = typer.Option("boss", "--channel", "-c", help="渠道: boss / xhs / email"),

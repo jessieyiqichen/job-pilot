@@ -259,6 +259,17 @@ class JobPilotDB:
         finally:
             conn.close()
 
+    def count_jobs_by_status(self) -> dict[str, int]:
+        """Count jobs grouped by status. Returns {status: count}."""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status"
+            ).fetchall()
+            return {r["status"]: r["n"] for r in rows}
+        finally:
+            conn.close()
+
     # ------------------------------------------------------------------
     # Scores
     # ------------------------------------------------------------------

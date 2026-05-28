@@ -85,6 +85,15 @@ NEW_JOB_LOOKBACK_DAYS: int = int(os.environ.get("JOBPILOT_NEW_JOB_LOOKBACK_DAYS"
 FOLLOWUP_STALE_DAYS: int = int(os.environ.get("JOBPILOT_FOLLOWUP_STALE_DAYS", "7"))
 
 # ============================================================
+# Strategy Advisor (军师)
+# ============================================================
+# Below this many applications, strategy diagnosis is noise — the advice
+# switches to "just start applying" instead of fabricating funnel analysis.
+ADVISOR_MIN_APPLICATIONS: int = int(os.environ.get("JOBPILOT_ADVISOR_MIN_APPS", "5"))
+# Window (days) for the "application pace" signal — how many applied recently.
+ADVISOR_PACE_DAYS: int = int(os.environ.get("JOBPILOT_ADVISOR_PACE_DAYS", "7"))
+
+# ============================================================
 # Email delivery (SMTP) — secrets come from env / .env, never committed
 # ============================================================
 SMTP_HOST: str = os.environ.get("JOBPILOT_SMTP_HOST", "smtp.gmail.com")
