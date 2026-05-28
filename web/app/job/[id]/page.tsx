@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import ScoreBadge from '@/components/ScoreBadge';
 import type { JobWithScore } from '@/types/job';
+import { TAILOR_SAMPLES, INTERVIEW_SAMPLES } from '@/lib/demo-samples';
 
 const PLATFORM_LABELS: Record<string, string> = {
   boss: 'BOSS直聘',
@@ -83,6 +84,8 @@ export default function JobDetailPage() {
   }
 
   const status = STATUS_LABELS[job.status] ?? { label: job.status, color: 'bg-gray-100 text-gray-600' };
+  const tailorSample = job.id != null ? TAILOR_SAMPLES[job.id] : undefined;
+  const interviewSample = job.id != null ? INTERVIEW_SAMPLES[job.id] : undefined;
 
   return (
     <div className="animate-fadeIn space-y-6">
@@ -212,6 +215,72 @@ export default function JobDetailPage() {
         <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-[15px] font-semibold text-gray-900">岗位描述</h2>
           <div className="text-[13px] leading-relaxed text-gray-600 whitespace-pre-wrap">{job.jd_text}</div>
+        </div>
+      )}
+
+      {/* Tailored Resume Sample (demo showcase of the CLI tailoring feature) */}
+      {tailorSample && (
+        <div className="rounded-xl border border-purple-100 bg-white p-6 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-[15px] font-semibold text-gray-900">定制简历样例</h2>
+            <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-600">
+              jobpilot tailor
+            </span>
+          </div>
+          <p className="mb-4 text-[12px] leading-relaxed text-gray-400">{tailorSample.note}</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="mb-2 text-[12px] font-medium text-gray-400">原简历</h3>
+              <div className="space-y-3">
+                {tailorSample.before.map((b, i) => (
+                  <div key={i} className="rounded-lg bg-gray-50 p-3">
+                    <p className="mb-1 text-[11px] font-medium text-gray-400">{b.section}</p>
+                    <p className="text-[12px] leading-relaxed text-gray-600">{b.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="mb-2 text-[12px] font-medium text-purple-600">定制后（按 JD）</h3>
+              <div className="space-y-3">
+                {tailorSample.after.map((a, i) => (
+                  <div key={i} className="rounded-lg bg-purple-50/50 p-3 ring-1 ring-purple-100">
+                    <p className="mb-1 text-[11px] font-medium text-purple-500">{a.section}</p>
+                    <p className="text-[12px] leading-relaxed text-gray-700">{a.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interview Prep Sample (demo showcase of the CLI interview feature) */}
+      {interviewSample && (
+        <div className="rounded-xl border border-amber-100 bg-white p-6 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-[15px] font-semibold text-gray-900">面试准备样例</h2>
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-600">
+              jobpilot interview
+            </span>
+          </div>
+          <p className="mb-4 text-[12px] leading-relaxed text-gray-400">{interviewSample.prep_notes}</p>
+          <div className="space-y-4">
+            {interviewSample.questions.map((q, i) => (
+              <div key={i} className="border-l-2 border-amber-200 pl-3">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                    {q.category}
+                  </span>
+                  <p className="text-[13px] font-medium text-gray-800">{q.question}</p>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-gray-600">
+                  <span className="font-medium text-gray-400">要点：</span>
+                  {q.talking_point}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
