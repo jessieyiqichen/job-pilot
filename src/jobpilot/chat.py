@@ -18,6 +18,7 @@ from typing import Callable
 from jobpilot import config
 from jobpilot.advisor import _format_preferences
 from jobpilot.ask import AskContext, gather_context
+from jobpilot.chat_store import load_history, save_history
 from jobpilot.db import JobPilotDB
 from jobpilot.models import Profile
 
@@ -110,13 +111,16 @@ def run_chat(
     profile_id: int = config.DEFAULT_PROFILE_ID,
     job_id: str | None = None,
     *,
+    resume: bool = True,
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
 ) -> None:
     """Run the interactive chat REPL.
 
-    input_fn/output_fn are injectable for testing. History lives in memory for
-    the session (persistence across runs is a future enhancement).
+    With resume=True (default) the saved transcript is loaded so the 军师 picks
+    up where it left off. The full history is persisted after every turn; only
+    the most recent CHAT_MAX_CONTEXT_MESSAGES are sent to the API to bound cost.
+    input_fn/output_fn are injectable for testing.
 
     Raises:
         ChatError: when no API key is configured.
@@ -130,10 +134,13 @@ def run_chat(
     context = gather_context(db, profile_id, job_id)
     system = build_system_prompt(profile, context)
 
+    history: list[Message] = load_history(profile_id) if resume else []
+
     output_fn("🧭 求职军师已就位，问我任何求职问题（输入 exit / q 退出）。")
+    if history:
+        output_fn(f"   接着上次聊（已载入 {len(history) // 2} 轮历史）。")
     output_fn(f"   我知道你的处境：{context.diagnosis.headline}")
 
-    history: list[Message] = []
     while True:
         try:
             user_text = input_fn("你> ")
@@ -149,11 +156,13 @@ def run_chat(
             continue
 
         history.append({"role": "user", "content": stripped})
+        window = history[-config.CHAT_MAX_CONTEXT_MESSAGES:]
         try:
-            reply = generate_reply(history, system)
+            reply = generate_reply(window, system)
         except ChatError as exc:
             output_fn(f"[出错] {exc}")
             history.pop()  # drop the unanswered turn so history stays consistent
             continue
         history.append({"role": "assistant", "content": reply})
+        save_history(profile_id, history)  # persist full transcript each turn
         output_fn(f"军师> {reply}")

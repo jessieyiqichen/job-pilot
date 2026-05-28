@@ -40,6 +40,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 26: 投递计划军师 plan（planner.py：build_weekly_plan 确定性算本周投递清单[待投高分岗 scored/tailored 按分排序+ready 标记+理由]+跟进清单[停滞投递按天数倒序]+节奏提示，PLAN_WEEKLY_TARGET 截断；format_plan_markdown 渲染；**纯确定性不烧 API**）+ jobpilot plan 命令（--target 覆盖目标数）（05-28，402 tests）。军师三刀齐：advisor 诊断+ask 答疑+plan 计划
 - Phase 27: 军师上 Web demo（demo_export.advisor_snapshot 把诊断+周计划序列化成 JSON+export_advisor_snapshot.py 脚本[有 key 顺带真生成 advice]→web/demo-data/advisor.json；web /advisor 页[headline+信号卡+周计划表+MiniMarkdown 渲染 advice]+NavBar"求职军师"入口；refresh_demo.sh 加导出步；MiniMarkdown 极简组件免依赖）（05-28，408 tests，npm build 1055 页过）→ 已部署 https://web-ten-omega-72.vercel.app/advisor
 - Phase 28: 实时对话军师 chat（chat.py：build_system_prompt 把诊断+偏好+高分岗灌进 system，run_chat REPL 维护 messages 历史多轮对话+记忆上文，generate_reply 调 API[system+history]；复用 ask.gather_context grounding；input_fn/output_fn 可注入便于测试；退出词 exit/q/bye/退出；EOF/Ctrl-C 优雅退出；无 key 抛 ChatError 实时对话不降级）+ jobpilot chat 命令（--job 锚定岗位）（05-28，417 tests）。真实端到端：两轮对话记忆生效，第二轮承接第一轮推荐具体岗位
+- Phase 29: chat 记忆跨 session 持久化（chat_store.py：load/save/clear_history per-profile JSON 存 data/chats/[gitignored]，原子写，malformed 容错丢弃；run_chat resume=True 默认接续历史，全量存盘+滑动窗口 CHAT_MAX_CONTEXT_MESSAGES(30) 喂 API 控 token；--new 重开）（05-28，428 tests）。真实跨进程烟测：第二次重启准确记起第一次说的"成长空间>薪资"
 
 ## 关键数据
 
@@ -83,7 +84,30 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
 
-### 实时对话军师 Phase 28（2026-05-28）
+### chat 记忆跨 session 持久化 Phase 29（2026-05-28）
+
+**需求**：让 chat 成为记得住的长期军师——关掉重开能接着上次聊。
+
+**设计**：全量存盘 + 滑动窗口喂 API（既要长期记忆又控 token）。
+- `chat_store.py`：load/save/clear_history(profile_id)，per-profile JSON 存 config.CHATS_DIR（data/chats/，已 gitignore——对话含个人内容不入仓）。原子写（tmp+replace）；load 容错（corrupt JSON / malformed entry 丢弃返回干净 history）
+- run_chat 加 `resume`（默认 True）：启动 load_history 接续；每轮 assistant 回复后 save 全量；喂 generate_reply 的是 history[-CHAT_MAX_CONTEXT_MESSAGES(30):] 滑动窗口
+- CLI chat 加 `--new`（resume=False，全新对话）
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/chat_store.py` | 新建。chat_file/load_history/save_history/clear_history |
+| `src/jobpilot/chat.py` | run_chat 加 resume 参数 + load/save 接入 + 滑动窗口 |
+| `src/jobpilot/config.py` | 新增 CHATS_DIR（加 mkdir 循环）+ CHAT_MAX_CONTEXT_MESSAGES(30) |
+| `src/jobpilot/cli.py` | chat 命令加 --new |
+| `.gitignore` | 加 data/chats/ |
+| `tests/test_chat_store.py`（+7）+ `tests/test_chat.py`（+4：持久化/续接/--new/滑动窗口）| +11 测试 |
+
+**测试**：417 → 428（+11），全过。test_chat.py 加 autouse fixture 把 CHATS_DIR 指 tmp 隔离副作用。**真实跨进程烟测**：第一次 run_chat 说"最看重成长空间其次薪资"存盘→第二次独立 run_chat(resume) 载入历史→准确记起。
+
+**军师完整形态（5 命令）**：chat（实时多轮+长期记忆，主力）/ advisor（诊断）/ ask（单问答）/ plan（计划）+ Web /advisor 页。**可选后续**：①旧对话太长时做 summary 压缩（现在是滑动窗口，会丢早期上下文）②chat 上 Web（需后端+key+限流）。
+
+**cli.py 拆分（独立任务，本 session 一并 commit）**：cli.py 从 1270+ 行拆成 63 行壳 + src/jobpilot/commands/*（advisor_cmds/apply_kit/discover/pipeline_cmds/quality），register-at-bottom 模式避免循环导入。428 测试全过共存验证。注：此拆分非军师 Phase 工作，是之前挂的技术债卡被执行，改动出现在工作树后本 session 帮忙提交（独立 refactor commit）。
 
 **需求澄清**：用户原意不是几个独立命令，而是「像 Claude 这样能实时多轮聊、记得上文」的对话军师。之前的 ask 是一问一答无记忆，理解窄了。本 Phase 补上真·多轮对话。载体经询问选定 CLI（Web 实时聊天需后端+API key 上线+防滥用，暂缓）。
 

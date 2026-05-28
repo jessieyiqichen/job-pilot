@@ -32,9 +32,10 @@ DB_PATH = DATA_DIR / "jobpilot.db"
 RESUMES_DIR = DATA_DIR / "resumes"
 TAILORED_DIR = DATA_DIR / "tailored"
 GREETINGS_DIR = DATA_DIR / "greetings"
+CHATS_DIR = DATA_DIR / "chats"
 
 # Ensure directories exist
-for _d in (DATA_DIR, RESUMES_DIR, TAILORED_DIR, GREETINGS_DIR):
+for _d in (DATA_DIR, RESUMES_DIR, TAILORED_DIR, GREETINGS_DIR, CHATS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ============================================================
@@ -94,6 +95,9 @@ ADVISOR_MIN_APPLICATIONS: int = int(os.environ.get("JOBPILOT_ADVISOR_MIN_APPS", 
 ADVISOR_PACE_DAYS: int = int(os.environ.get("JOBPILOT_ADVISOR_PACE_DAYS", "7"))
 # Weekly application target — how many jobs the plan suggests applying to per week.
 PLAN_WEEKLY_TARGET: int = int(os.environ.get("JOBPILOT_PLAN_WEEKLY_TARGET", "5"))
+# Chat: full history is persisted, but only the most recent N messages are sent
+# to the API each turn (sliding window) to keep token cost bounded.
+CHAT_MAX_CONTEXT_MESSAGES: int = int(os.environ.get("JOBPILOT_CHAT_MAX_CONTEXT", "30"))
 
 # ============================================================
 # Email delivery (SMTP) — secrets come from env / .env, never committed

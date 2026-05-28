@@ -21,6 +21,12 @@ from jobpilot.chat import (
 from jobpilot.models import Job, JobScore, Profile
 
 
+@pytest.fixture(autouse=True)
+def _isolate_chats(tmp_path, monkeypatch):
+    """Keep chat persistence out of the real data/chats during tests."""
+    monkeypatch.setattr(config, "CHATS_DIR", tmp_path / "chats")
+
+
 def _ctx():
     d = StrategyDiagnosis(high_score_total=37, total_applications=0, headline="先投起来")
     return AskContext(diagnosis=d, top_jobs=(("AI产品实习 @ 字节", 8.5),))
@@ -127,6 +133,99 @@ def test_run_chat_handles_eof(monkeypatch):
 
     # should not raise
     run_chat(db, profile_id=10, input_fn=raise_eof, output_fn=lambda _x: None)
+
+
+# ----------------------------------------------------------------------
+# run_chat — persistence / memory across runs
+# ----------------------------------------------------------------------
+
+
+def test_run_chat_persists_history(monkeypatch):
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key")
+    db = _mock_db()
+    inputs = iter(["第一个问题", "exit"])
+
+    with patch("jobpilot.chat.generate_reply", return_value="军师的答"):
+        run_chat(db, profile_id=10, input_fn=lambda _="": next(inputs), output_fn=lambda _x: None)
+
+    from jobpilot.chat_store import load_history
+
+    saved = load_history(10)
+    assert saved == [
+        {"role": "user", "content": "第一个问题"},
+        {"role": "assistant", "content": "军师的答"},
+    ]
+
+
+def test_run_chat_resumes_prior_history(monkeypatch):
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key")
+    from jobpilot.chat_store import load_history, save_history
+
+    save_history(10, [
+        {"role": "user", "content": "上次聊的"},
+        {"role": "assistant", "content": "上次答的"},
+    ])
+    db = _mock_db()
+    inputs = iter(["新问题", "exit"])
+    seen_lengths = []
+
+    def fake_reply(history, system):
+        seen_lengths.append(len(history))
+        return "新答"
+
+    with patch("jobpilot.chat.generate_reply", side_effect=fake_reply):
+        run_chat(db, profile_id=10, input_fn=lambda _="": next(inputs), output_fn=lambda _x: None)
+
+    # API saw prior 2 + new user = 3 messages → memory carried over
+    assert seen_lengths == [3]
+    # transcript now has 4 messages persisted
+    assert len(load_history(10)) == 4
+
+
+def test_run_chat_fresh_ignores_prior_history(monkeypatch):
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key")
+    from jobpilot.chat_store import save_history
+
+    save_history(10, [{"role": "user", "content": "旧的"}, {"role": "assistant", "content": "旧答"}])
+    db = _mock_db()
+    inputs = iter(["全新问题", "exit"])
+    seen_lengths = []
+
+    def fake_reply(history, system):
+        seen_lengths.append(len(history))
+        return "答"
+
+    with patch("jobpilot.chat.generate_reply", side_effect=fake_reply):
+        run_chat(db, profile_id=10, resume=False,
+                 input_fn=lambda _="": next(inputs), output_fn=lambda _x: None)
+
+    assert seen_lengths == [1]  # started clean, only the new user message
+
+
+def test_run_chat_sliding_window_caps_api_context(monkeypatch):
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key")
+    monkeypatch.setattr(config, "CHAT_MAX_CONTEXT_MESSAGES", 2)
+    from jobpilot.chat_store import save_history
+
+    # 4 prior messages already saved
+    save_history(10, [
+        {"role": "user", "content": "a"},
+        {"role": "assistant", "content": "b"},
+        {"role": "user", "content": "c"},
+        {"role": "assistant", "content": "d"},
+    ])
+    db = _mock_db()
+    inputs = iter(["新问题", "exit"])
+    seen_lengths = []
+
+    def fake_reply(history, system):
+        seen_lengths.append(len(history))
+        return "答"
+
+    with patch("jobpilot.chat.generate_reply", side_effect=fake_reply):
+        run_chat(db, profile_id=10, input_fn=lambda _="": next(inputs), output_fn=lambda _x: None)
+
+    assert seen_lengths == [2]  # window capped to last 2, despite 5 total
 
 
 # ----------------------------------------------------------------------

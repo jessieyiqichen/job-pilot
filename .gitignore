@@ -13,6 +13,7 @@ data/jobpilot.db-shm
 data/resumes/
 data/tailored/
 data/greetings/
+data/chats/
 data/report_*.md
 data/resume_config.yaml
 data/xhs_jobs.json
