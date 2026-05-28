@@ -38,6 +38,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 24: 策略诊断军师 advisor（advisor.py：诊断层 diagnose 确定性算 6 信号[漏斗/高分岗缺口/停滞/定制覆盖/投递节奏/数据量门槛]+建议层 generate_advice LLM 翻人话，无 key 降级导出 prompt；诚实护栏：投递<ADVISOR_MIN_APPLICATIONS(5) 时改口"先投起来"不硬编转化分析）+ jobpilot advisor 命令 + db.count_jobs_by_status（05-28，378 tests）
 - Phase 25: 对话答疑军师 ask（ask.py：gather_context 收集诊断+高分岗+可选岗位，build_ask_prompt 注入真实处境+偏好，结合数据回答 offer/薪资/HR 问题；--job 注入具体 JD+评分；无 key 降级导出 prompt）+ jobpilot ask 命令 + **修复偏好取错源 bug**（advisor/ask 原从 profile.structured 取偏好[空]，改为回退 scorer._load_preferences 读 resume_config.yaml + 修正 key 名 cities→preferred_cities/values→priorities）（05-28，391 tests）
 - Phase 26: 投递计划军师 plan（planner.py：build_weekly_plan 确定性算本周投递清单[待投高分岗 scored/tailored 按分排序+ready 标记+理由]+跟进清单[停滞投递按天数倒序]+节奏提示，PLAN_WEEKLY_TARGET 截断；format_plan_markdown 渲染；**纯确定性不烧 API**）+ jobpilot plan 命令（--target 覆盖目标数）（05-28，402 tests）。军师三刀齐：advisor 诊断+ask 答疑+plan 计划
+- Phase 27: 军师上 Web demo（demo_export.advisor_snapshot 把诊断+周计划序列化成 JSON+export_advisor_snapshot.py 脚本[有 key 顺带真生成 advice]→web/demo-data/advisor.json；web /advisor 页[headline+信号卡+周计划表+MiniMarkdown 渲染 advice]+NavBar"求职军师"入口；refresh_demo.sh 加导出步；MiniMarkdown 极简组件免依赖）（05-28，408 tests，npm build 1055 页过）
 
 ## 关键数据
 
@@ -80,6 +81,28 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 军师上 Web demo Phase 27（2026-05-28）
+
+**需求**：军师三刀都在 CLI，作品集 demo（Vercel）看不到。把军师搬上 Web 增强叙事。
+
+**架构难点**：web 是 Next.js（TS），不能调 Python 的 advisor/planner；且 demo 是静态站（零运行时 DB/API）。解法=refresh 期用 Python 算好军师诊断+计划 dump 成静态 JSON，web 只渲染（单一事实来源仍是 Python）。
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/demo_export.py` | 新建。advisor_snapshot(db,profile_id,advice) → JSON-safe dict（diagnose+build_weekly_plan 序列化） |
+| `scripts/export_advisor_snapshot.py` | 新建。读真实库算快照写 web/demo-data/advisor.json；有 API key 时 best-effort 真生成 advice（无 key 留空，web 优雅降级） |
+| `scripts/refresh_demo.sh` | 加导出军师快照步（脱敏后、部署前） |
+| `web/lib/advisor.ts` | 类型 + import demo-data/advisor.json |
+| `web/components/MiniMarkdown.tsx` | 新建。极简 Markdown 渲染（##/###/**/列表/---），免加 markdown 依赖 |
+| `web/app/advisor/page.tsx` | 新建。force-static：headline 卡 + 关键信号卡 + 本周计划表 + MiniMarkdown 渲染 advice + 脱敏说明 |
+| `web/app/layout.tsx` | NavBar 加"求职军师" |
+| `tests/test_demo_export.py` | +6 测试 |
+
+**测试**：402 → 408（+6），全过。npm run build 通过（/advisor 预渲染为静态，1055 页全生成）。真实 advice 已生成烤入（点出"19 份简历 0 投递=完美准备的坑"，有说服力）。
+
+**注意**：军师快照基于真实库生成（含真实偏好诊断），advice 文本含求职状态（用户已知情同意公开，同 Phase 15）。**待用户**：是否部署上线（cd web && vercel --prod / 或 refresh_demo.sh --deploy）。
 
 ### 投递计划军师 Phase 26（2026-05-28）
 

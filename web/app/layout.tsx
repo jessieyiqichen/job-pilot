@@ -31,6 +31,12 @@ function NavBar() {
             求职漏斗
           </Link>
           <Link
+            href="/advisor"
+            className="text-[14px] text-gray-500 transition-colors hover:text-gray-900"
+          >
+            求职军师
+          </Link>
+          <Link
             href="/how-it-works"
             className="text-[14px] text-gray-500 transition-colors hover:text-gray-900"
           >

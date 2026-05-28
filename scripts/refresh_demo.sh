@@ -29,6 +29,10 @@ JOBS=$(sqlite3 "$DEMO_DB" "SELECT COUNT(*) FROM jobs;")
 SCORES=$(sqlite3 "$DEMO_DB" "SELECT COUNT(*) FROM job_scores;")
 echo "✅ 快照就绪：$JOBS 岗位 / $SCORES 评分（profiles 已清空）"
 
+echo "🧭 导出军师快照 → web/demo-data/advisor.json"
+# 基于真实库算诊断+周计划（确定性），有 API key 时顺带生成军师建议。
+(cd "$PROJECT_DIR" && python scripts/export_advisor_snapshot.py)
+
 if [ "${1:-}" = "--deploy" ]; then
   echo "🚀 重新部署到 Vercel…"
   (cd "$PROJECT_DIR/web" && vercel --prod --yes)
