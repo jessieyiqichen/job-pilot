@@ -44,6 +44,10 @@ preferences:
   core_strengths: "Python, SQL, Data Analysis"
   learning_goals: "Machine Learning"
 
+  # Company blacklist (substring match) — matched jobs are hard-down-ranked to <=2.0
+  blacklist_companies: []          # e.g. ["某外包", "XX科技"]
+  filter_headhunter: true          # soft-down-rank 猎头/代招 reposts to <=4.0
+
   # Role fit — controls how well different job types match your goals
   # strong_match: score × 1.0, good_match: score × 0.7, weak_match: score × 0.3 + cap at 5.0
   # Omit this section to disable role fit scoring

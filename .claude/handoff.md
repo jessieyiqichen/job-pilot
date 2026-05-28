@@ -28,6 +28,8 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 16: 面试准备生成器（ai/interview.py：高分岗+简历→面试题+STAR要点，JSON 结构化，无 API 降级导出 prompt）+ jobpilot interview 命令 + refresh_demo.sh 一键刷新 demo（05-28，320 tests）
 - Phase 17: #4 eval 一致性度量（eval.py）+ label 交互式标注（333 tests，校准待真实标签）（05-28）
 - Phase 18: README 整体重写 + GitHub topics/badge + demo 增强（详情页烤入定制简历/面试准备样例 + /how-it-works 页）→ redeploy https://web-ten-omega-72.vercel.app （05-28）
+- Phase 18.5: API key 配好(.env 自动加载) + 真跑 interview 修 max_tokens 截断 bug + demo 用真实生成内容（05-28，334 tests）
+- Phase 19: 借鉴对标项目（get_jobs/boss-agent-cli）→ 打招呼语生成器 + 黑名单/猎头过滤 + GitHub Actions CI + 合规边界声明（05-28，346 tests，覆盖率 77%）
 
 ## 关键数据
 
@@ -53,6 +55,21 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - 偏好调整 ✅ 已 review：配置已改、旧评分已清零、merge 保护 role_fit
 
 ## CLI 完成报告
+
+### 借鉴对标项目 Phase 19（2026-05-28）
+调研 GitHub 中国招聘开源项目，对标 loks666/get_jobs(7k⭐ 激进派) + can4hou6joeng4/boss-agent-cli(937⭐ 克制派同类)。落地 4 项：
+| 项 | 文件 | 说明 |
+|----|------|------|
+| 打招呼语生成器 | `ai/greeting.py` + cli `greeting` | 学 get_jobs 的 AI 打招呼，但保持"我们生成、你来发，不自动触达" |
+| 黑名单/猎头过滤 | `filters.py` + scorer.score_jobs 接入 | 黑名单硬降权 2.0 / 猎头软降权 4.0，降权而非删除；偏好 blacklist_companies / filter_headhunter |
+| GitHub Actions CI | `.github/workflows/ci.yml` | push/PR 跑 346 测试 + 覆盖率(77%)，codecov 上传 |
+| 合规边界声明 | README「Compliance & boundaries」 | 本地/只读/不自动投递/不自爬/低频/数据本地 |
+
+**测试 334→346（+12）。** 待用户：codecov badge 需到 codecov.io 连接仓库(免费1-click)才点亮；CI 状态 badge push 后自动生效。
+**遗留观察**：测试套件耗时从 ~1.3s 涨到 ~38s（疑似某 anthropic-mock 测试或适配器测试有网络/慢点，未定位）。非阻塞，后续可查 test isolation。
+
+---
+
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
 

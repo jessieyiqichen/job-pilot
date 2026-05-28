@@ -1,9 +1,11 @@
 # JobPilot
 
+[![CI](https://github.com/jessieyiqichen/job-pilot/actions/workflows/ci.yml/badge.svg)](https://github.com/jessieyiqichen/job-pilot/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/jessieyiqichen/job-pilot/branch/main/graph/badge.svg)](https://codecov.io/gh/jessieyiqichen/job-pilot)
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![Claude API](https://img.shields.io/badge/Claude-API-D97757?logo=anthropic&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-333%20passing-3FB950)
+![Tests](https://img.shields.io/badge/tests-346%20passing-3FB950)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 AI-powered job hunting assistant for Chinese recruitment platforms.
@@ -32,6 +34,16 @@ Not a scraper — an intelligent layer on top of existing tools: AI matching, re
 - No skill fabrication (whitelist-based)
 
 > Note: `boss-cli` is currently unavailable upstream (anti-scraping broke `__zp_stoken__`), so search defaults to WebSearch + Xiaohongshu.
+
+## Compliance & boundaries（合规与边界）
+
+JobPilot is a **local, read-first, user-triggered** assistant. Deliberate boundaries:
+
+- **Does not submit applications or contact recruiters.** `apply` only records status locally; you open the original post and reach out yourself.
+- **Does not write its own scrapers.** WebSearch uses Anthropic's official `web_search` tool (no browser). Xiaohongshu goes through `rednote-mcp` (Playwright automation **under your own login session**). Boss relies on `boss-cli`.
+- **Low-frequency, on-demand.** No bulk outreach, no risk-control bypass; a scheduled run does single-digit-to-tens of jobs/day with `job_id` dedup.
+- **Data stays local.** SQLite DB and resumes never leave your machine; the public demo serves a sanitized, frozen snapshot.
+- **No skill fabrication.** Tailoring/interview/greeting only reference experience that exists in your resume.
 
 ## Architecture
 
@@ -87,6 +99,7 @@ jobpilot apply                         # 5. mark applied (human-in-the-loop)
 | `status <job_id> <status>` | Update application status |
 | `tailor <job_id>` / `--top N` / `--from-text <file>` | Tailor resume (single / batch / import) |
 | `interview <job_id> [-o file.md]` | Generate interview prep |
+| `greeting <job_id>` | Generate a personalized opening message for the HR (you send it) |
 | `import-xhs <json> [--score]` | Import Xiaohongshu favorites |
 | `apply` | Interactive batch apply |
 | `pipeline` | Funnel statistics |
