@@ -24,6 +24,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 12: 全流程自动化 `pipeline-all`（搜索→打分→定制→日报，单命令，stage 隔离失败）+ 偏好持久化 .claude/preferences.md + SessionStart hook 自动注入偏好（05-27，293 tests）
 - Phase 13: 日报增强（新增高分岗位 digest 近N天 + 投递跟进提醒 + 修复 report profile_id=1 bug）（05-27，299 tests）
 - Phase 14: 邮件 digest + 本地 launchd 定时（notify.py SMTP + generate_digest + pipeline-all --email + digest 命令 + daily_run.sh + plist）（05-28，307 tests）
+- Phase 15: Web demo 部署 Vercel（脱敏快照 DB + API force-static/SSG + better-sqlite3 仅 build 期）→ LIVE: https://web-ten-omega-72.vercel.app （05-28）
 
 ## 关键数据
 
@@ -122,6 +123,31 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 2. 用户给定时时间 → 改 plist Hour/Minute → `cp` 到 ~/Library/LaunchAgents/ → `launchctl load`
 3. 配好后跑 `jobpilot digest --email` 发测试邮件验证
 （SMTP 真实发送未端到端测过，只 mock 测了逻辑）
+
+### Web demo 部署 Vercel Phase 15（2026-05-28）
+
+**需求**：用户要部署 Vercel。澄清目的=简历/作品集 live demo（非 live 真实数据）。
+
+**架构冲突 & 解法**：web 原本运行时读本地 SQLite（better-sqlite3，gitignored DB），Vercel serverless 无持久磁盘 → 直接部署是空壳。解法=把冻结快照在 `next build` 时烤成静态站点，运行时零 DB。
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `web/demo-data/jobpilot.db` | 脱敏快照（349 岗+339 评分，profiles/applications 清空，WAL 折叠成单文件） |
+| `web/lib/db.ts` | 默认路径→打包 demo db（JOBPILOT_DB_PATH 可切回 ../data 本地 live）+ getAllJobIds() |
+| `web/app/api/jobs/route.ts`、`stats/route.ts` | force-static |
+| `web/app/api/jobs/[id]/route.ts` | force-static + generateStaticParams（349 预渲染） |
+| `web/app/api/jobs/[id]/resume{,/check}/route.ts` | force-static + generateStaticParams；demo 不提供下载（check 恒 false） |
+| `.gitignore` | logs/、web/demo-data 的 db-wal/shm、web/.vercel |
+
+**部署**：vercel CLI（已登录 jessiechenyiqihahaha），从 web/ `vercel --prod --yes`。
+- LIVE: https://web-ten-omega-72.vercel.app （HTTP 200，公开无登录墙，/api/jobs 有数据，/api/stats 漏斗正常，/job/121 200）
+- next build 验证 1053 静态页全部生成
+
+**注意**：
+- demo 数据冻结（本地 pipeline 不推送）；要更新 demo 需重新 cp+脱敏 web/demo-data/jobpilot.db 再 redeploy
+- 公开的是真实 349 岗位+AI 评分/建议（profiles 简历原文已脱敏）；用户已知情同意
+- 大脑（pipeline/打分/定制/定时/邮件/MCP）仍全部本地，Vercel 只托管看板 UI
 
 ### 新一轮XHS搜索（2026-05-06）
 
