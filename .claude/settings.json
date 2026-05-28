@@ -11,6 +11,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" 2>/dev/null && [ -n \"$(git status --porcelain 2>/dev/null)\" ] && echo '{\"systemMessage\":\"⚠️ 有未提交改动 — 要 commit 吗？顺便看看 README 要不要更新。\"}' || true"
+          }
+        ]
+      }
     ]
   }
 }
