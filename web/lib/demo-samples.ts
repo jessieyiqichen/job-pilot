@@ -74,39 +74,78 @@ export const TAILOR_SAMPLES: Record<number, TailorSample> = {
 };
 
 export const INTERVIEW_SAMPLES: Record<number, InterviewSample> = {
+  // 真实由 `jobpilot interview` 生成（Claude API），非手写。
   188: {
     prep_notes:
-      '主打：你做过的 Nous AI avatar 与数字人方向高度相关，要主动牵到这条线；vibe-coding 用 JobPilot/MusiClaw 独立交付佐证。短板：没有正式产品岗 title，用「独立从 0 到 1 交付」对冲。',
+      '核心优势：① 数据驱动+结果导向（所有项目都有数据→insight→business impact 链路）② 快速学习（6 天搭爬虫、独立完成多项目）③ 商业 sense（经济学+票务项目）④ 项目 ownership（多次 Team Leader / 独立项目）。需提前补强：面试前深度体验 HeyGen/D-ID/腾讯智影，了解 Stable Diffusion/ComfyUI 基础，准备数字人赛道分析 + SpatialWalk 针对性问题。',
     questions: [
       {
-        category: '项目深挖',
-        question: '介绍一个你做过的、和数字人/AI 形象最相关的项目。',
+        category: '行为面',
+        question:
+          '你在简历中提到担任过多个项目的负责人，能否分享一次你在团队协作中遇到冲突或意见不统一的情况，你是如何处理的？',
         talking_point:
-          'S：想验证"用对话推断人的认知"。T：搭一个 9 维认知建模的 AI avatar。A：设计对话访谈 + 双轨信号提取 + 矛盾检测。R：行为预测从 49%→71%（T2 90%），被动采集 101 个信号。牵引到数字人「高保真行为」的产品价值。',
-      },
-      {
-        category: '产品 sense',
-        question: '如果让你评测一批数字人形象的质量，你会定义哪些指标？',
-        talking_point:
-          '从我做评分 eval 的经验出发：先定 ground truth（真人偏好打标），再分维度（真实度/口型同步/情绪一致/时延），用 precision/recall 量化模型和人判断的一致性，改一版测一版对比。',
-      },
-      {
-        category: '技术理解',
-        question: '你怎么理解 vibe-coding？举个你自己的例子。',
-        talking_point:
-          'JobPilot/MusiClaw 都是我用 Claude Code 独立从 0 到 1 搭出来的——快速搭骨架、跑起来、按真实使用反馈迭代。能交付结果而不是写文档。',
-      },
-      {
-        category: '岗位&公司匹配',
-        question: '为什么想来一家数字人创业公司，而不是大厂？',
-        talking_point:
-          '我喜欢端到端拥有一个产品（独立项目就是证据），创业公司没有 dirty work、直接和创始团队配合，正好匹配我「做核心、快速试错」的习惯。',
+          '【S】Sentiment Analysis 项目任 Team Leader，处理 10 万+ 评论、选模型方案。【T】要在 KNN/Random Forest/LSTM 间做选择，成员对技术路线有分歧。【A】设计系统 benchmark，用 TimeSeriesSplit 交叉验证客观对比，用数据说话；每人负责一个模型调优，保证参与感。【R】LSTM 达 86% 精度、比 baseline 高 18 个百分点，团队因清晰分工+数据驱动而信服。',
       },
       {
         category: '行为面',
-        question: '讲一次你交付结果时遇到的最大障碍，怎么解决的。',
+        question:
+          "这个岗位需要'能交付结果'且'肯花时间'。能分享一个时间紧迫或资源有限、你仍保质保量完成的例子吗？",
         talking_point:
-          'MusiClaw 爬取座位图做票房估算时反爬+数据噪声大，我用座位图颜色分析 + 容错管道解决，最终部署上线日更。诚实说：这块更多是工程韧性，正式团队协作经验需要补强。',
+          '【S】Live Ticketing 市场情报系统是我的独立项目，数据源完全不公开。【T】短时间从零搭自动化爬虫拿 SKU 级票务数据。【A】自学 Playwright/Selenium 搭稳定采集 pipeline，6 天积累 618+ 条覆盖 22 场演出，反复调试反爬。【R】识别出销售率 3.7%→97.5% 的巨大差异、发现 6 天涨 17 个百分点的爆款，为定价提供独特 insight。',
+      },
+      {
+        category: '产品sense',
+        question:
+          '如果让你评估一个数字人产品的核心指标，你会选哪些？若生成速度与画面质量冲突，如何取舍？',
+        talking_point:
+          '分层设计：技术指标(逼真度/流畅度/速度/稳定性)、用户指标(满意度/时长/复购)、商业指标(转化/客单价/交付周期)。取舍看场景：ToB 大客户→画质优先；C 端高频→速度优先。方法上像做 TimeSeriesSplit 一样用 A/B 找质量-速度最优点。【需补强】面试前深度体验 HeyGen、D-ID，记录各家取舍策略。',
+      },
+      {
+        category: '产品sense',
+        question:
+          "JD 提到'探索算法效果的边界'。让你测一个新的数字人生成算法，你会怎样系统性发现它的能力边界和局限？",
+        talking_point:
+          '【方法论迁移】像 Tax Morale 项目处理 7000+ 样本那样构建测试集，覆盖人物特征/场景复杂度/动作类型；像 benchmark 三个模型一样设可量化指标(保真度/自然度/边缘成功率)+评分 rubric；系统测极端 case 记录失败模式；像 Bayesian 调参一样按结果向算法团队反馈。【需补强】学习 FID/LPIPS 等数字人专业评测标准。',
+      },
+      {
+        category: '技术理解',
+        question:
+          '你对主流 AI 图像/视频生成模型(Stable Diffusion、Runway、Sora 等)的原理与应用区别有了解吗？对数字人有什么启发？',
+        talking_point:
+          '【基础】有 LSTM/Random Forest 训练调优经验，理解架构/数据质量/超参的影响；知道 SD 基于 diffusion、Sora 增加时间维度连贯性挑战。【迁移】NLP 处理 10 万+ 文本让我懂数据质量决定效果，对数字人(高质量人脸/表情数据)同样关键。【诚实+计划】实操工具(Midjourney/ComfyUI)经验有限，计划系统学 prompt 工程、读 CVPR/ICCV 数字人论文、1-2 周内能独立产出——6 天搭爬虫证明我学得快。',
+      },
+      {
+        category: '技术理解',
+        question: "JD 提到 'vibe-coding'，你理解吗？有相关经历吗？在 AI 产品开发中能发挥什么作用？",
+        talking_point:
+          "【理解】通过快速原型迭代找产品'感觉'，而非一开始追求完美工程。【经历】Live Ticketing 先搭 MVP 爬虫验证数据价值再优化；爬虫项目本质就是 vibe-coding；Sentiment Analysis 快速 benchmark 三个模型而非 all-in。【价值】对数字人意味着快速测不同参数/风格/场景，用实际效果指导方向。【需补强】了解 ComfyUI workflow、API 调用等快速原型工具链。",
+      },
+      {
+        category: '项目深挖',
+        question:
+          "Live Ticketing 项目里你提到 'identified pricing inefficiencies'，你是如何定义和量化它的？对商业决策有什么实际启发？",
+        talking_point:
+          '【量化】收集座位级价格+售罄、算每场销售速率(6 天变化)；定义 inefficiency = 同等速度下价格偏低/高价快速售罄(可涨价)、或低价滞销(定价过高或营销不足)。发现一场 6 天 80%→97.5% 却没调价=动态定价机会损失；另一场仅 3.7% 但价格中等=问题在营销而非价格。【迁移】方法论可迁到数字人定价(不同质量/风格如何定价最大化价值)，也支撑"用数据说服大客户"。',
+      },
+      {
+        category: '项目深挖',
+        question:
+          'Sentiment Analysis 最终 precision 86%，但实际业务里这个模型还有哪些局限？要真正用于投资决策你会如何改进？',
+        talking_point:
+          '【批判】局限：样本偏差(知乎用户不代表整体)、相关≠因果、时滞、黑天鹅。【改进】扩展微博/雪球多源降偏差；用毕业论文的 econometric 方法(工具变量/DID)建因果；升级到小时级数据；结合成交量/换手率做 ensemble。【迁移】这种"不只看成功案例、系统分析失败模式"的思维正对应"探索算法边界"，毕业论文的 heterogeneity / robustness check 就是体现。',
+      },
+      {
+        category: '岗位&公司匹配',
+        question:
+          '为什么选择数字人这个方向？未来最大的商业机会在哪？作为经济学背景候选人你的优势是什么？',
+        talking_point:
+          '【Why】技术成熟度(2024-25 快速突破，正从 demo 走向商业化)+内容产业的差异化需求(票务项目看到)+个人对 AI 商业化落地的兴趣。【机会判断】ToB 企业服务(数字代言人/虚拟客服)、内容降本、结合 LLM 的个性化 1 对 1(教育/陪伴)。【经济学优势】商业 sense + 数据驱动评估 + ROI 思维(哪些功能优先、如何定价)，正是创业公司需要的判断力。',
+      },
+      {
+        category: '岗位&公司匹配',
+        question: '这是早期创业公司，多变不确定。你为什么选创业公司而非大厂？你适合这种环境吗？',
+        talking_point:
+          "【Why】成长速度(快速成为核心而非螺丝钉)+直接 impact(与创始团队配合)+技术前沿(团队在 CVPR/NeurIPS 发表)。【适应性证明】独立项目从 idea 到执行自驱、不需 hand-holding；6 天搭爬虫证明快速学习；多次 Team Leader / 带 4 人团队的结果导向；同时推进多项目仍保持 GPA 4.0 的抗压。【价值观】JD 的'聪明、肯花时间、能交付'正是我的工作风格。",
       },
     ],
   },
