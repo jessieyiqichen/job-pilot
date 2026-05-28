@@ -21,6 +21,7 @@ data/xhs_favorites_raw.json
 data/eval_labels.json
 data/boss_manual_jobs.json
 data/*.md
+data/boss_spike_debug.*
 .DS_Store
 
 # Scripts (user-specific filters and debug)
@@ -28,6 +29,7 @@ scripts/compile_list.py
 scripts/filter_jobs.py
 scripts/fetch_xhs_favorites.js
 scripts/debug_*.js
+scripts/boss_uc_spike.py
 
 # Claude (personal CLAUDE.md has local paths; example is committed)
 CLAUDE.md
