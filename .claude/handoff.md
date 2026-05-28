@@ -41,6 +41,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 27: 军师上 Web demo（demo_export.advisor_snapshot 把诊断+周计划序列化成 JSON+export_advisor_snapshot.py 脚本[有 key 顺带真生成 advice]→web/demo-data/advisor.json；web /advisor 页[headline+信号卡+周计划表+MiniMarkdown 渲染 advice]+NavBar"求职军师"入口；refresh_demo.sh 加导出步；MiniMarkdown 极简组件免依赖）（05-28，408 tests，npm build 1055 页过）→ 已部署 https://web-ten-omega-72.vercel.app/advisor
 - Phase 28: 实时对话军师 chat（chat.py：build_system_prompt 把诊断+偏好+高分岗灌进 system，run_chat REPL 维护 messages 历史多轮对话+记忆上文，generate_reply 调 API[system+history]；复用 ask.gather_context grounding；input_fn/output_fn 可注入便于测试；退出词 exit/q/bye/退出；EOF/Ctrl-C 优雅退出；无 key 抛 ChatError 实时对话不降级）+ jobpilot chat 命令（--job 锚定岗位）（05-28，417 tests）。真实端到端：两轮对话记忆生效，第二轮承接第一轮推荐具体岗位
 - Phase 29: chat 记忆跨 session 持久化（chat_store.py：load/save/clear_history per-profile JSON 存 data/chats/[gitignored]，原子写，malformed 容错丢弃；run_chat resume=True 默认接续历史，全量存盘+滑动窗口 CHAT_MAX_CONTEXT_MESSAGES(30) 喂 API 控 token；--new 重开）（05-28，428 tests）。真实跨进程烟测：第二次重启准确记起第一次说的"成长空间>薪资"
+- Phase 30: 军师主动跟进 followup（followup.py：Commitment(frozen)+extract_commitments[LLM 从对话提取行动意图,JSON]+reconcile_with_applications[投了的自动闭环,确定性]；followup_store.py JSON 持久化；chat 集成：退出自动提取承诺存盘+开场主动提 open 承诺并注入 system；jobpilot followup 命令[列出/--done/--drop]）（05-28，452 tests）。真实端到端：聊"这周投字节+改简历"→退出记下2件→下次开场主动问"做了吗"，直击 0 投递断点
 
 ## 关键数据
 
@@ -83,6 +84,28 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 军师主动跟进 followup Phase 30（2026-05-28）
+
+**需求**：用户反馈①XHS 渠道高效 ②军师有大空间。选「军师主动跟进」切入——直击用户 0 投递断点（筛了 37 高分岗但没投），把军师从"被动问答"变"主动陪跑"。
+
+**"主动"在 CLI 怎么落地**（务实设计）：
+1. **默默记下**：chat 退出时 LLM 从对话提取"行动意图"（投某岗/改简历/联系内推）存成承诺
+2. **主动开口**：下次 chat 开场先提 open 承诺"上次你说要做X，做了吗"，不等你问
+3. **数据闭环**：承诺关联岗位若已投（applications 有记录）→ 自动标 done，不啰嗦
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/followup.py` | 新建。Commitment(frozen,new/with_status/to_dict/from_dict) + build_extract_prompt + parse_commitments_response(JSON 容错) + extract_commitments(API) + reconcile_with_applications(确定性自动闭环) |
+| `src/jobpilot/followup_store.py` | 新建。per-profile JSON 持久化（load/save/add[去重]/update_status/list），存 data/chats/（gitignored）|
+| `src/jobpilot/chat.py` | _greet_commitments（开场 reconcile+主动提+注入 system）+ _capture_commitments（退出 LLM 提取存盘，best-effort）接入 run_chat |
+| `src/jobpilot/commands/advisor_cmds.py` | 新增 followup 命令（列出 open + 自动闭环 + --done/--drop）|
+| `tests/test_followup.py`(+10) + `test_followup_store.py`(+7) + `test_cli_followup.py`(+4) + `test_chat.py`(+3) | +24 测试 |
+
+**测试**：428 → 452（+24），全过。test_chat autouse fixture 加 mock extract_commitments 防退出真调 API。**真实端到端**：聊"这周投字节+改简历项目"→退出提取 2 条承诺（连 due="这周"都抓到）→第二次 chat 开场主动列出问"做了吗"。
+
+**注意**：承诺捕获靠 LLM（退出+1 次 API 调用，无 key 静默跳过）；提取准确度依赖对话清晰度。reconcile 是确定性的（投了自动闭环不依赖 LLM）。**可选后续**：①承诺加真实 due date + 逾期高亮 ②advisor/plan 里也显示待跟进 ③XHS 内推联系方式提取（用户另一个高优方向，未做）。
 
 ### chat 记忆跨 session 持久化 Phase 29（2026-05-28）
 

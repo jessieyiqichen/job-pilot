@@ -149,3 +149,49 @@ def ask(
 
     console.print()
     console.print(answer)
+
+
+@app.command()
+def followup(
+    profile_id: int = typer.Option(config.DEFAULT_PROFILE_ID, "--profile", "-p", help="Profile ID"),
+    done: str = typer.Option("", "--done", help="标记某条承诺为完成（传列表里的 id）"),
+    drop: str = typer.Option("", "--drop", help="放弃某条承诺（传列表里的 id）"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """待跟进：军师从 chat 里记下的、你说要做但还没完成的事（投了的自动闭环）。"""
+    _setup_logging(verbose)
+    from jobpilot import followup as fu
+    from jobpilot.followup_store import (
+        load_commitments,
+        save_commitments,
+        update_status,
+    )
+
+    if done:
+        update_status(profile_id, done, "done")
+        console.print(f"[green]已标记完成: {done}[/green]")
+        return
+    if drop:
+        update_status(profile_id, drop, "dropped")
+        console.print(f"[yellow]已放弃: {drop}[/yellow]")
+        return
+
+    db = cli._get_db()
+    commitments = load_commitments(profile_id)
+    reconciled, closed = fu.reconcile_with_applications(commitments, db)
+    if closed:
+        save_commitments(profile_id, reconciled)  # auto-close already-applied
+
+    open_items = [c for c in reconciled if c.status == "open"]
+    if not open_items:
+        console.print("✅ 没有待跟进的承诺。在 jobpilot chat 里聊到要做的事，军师会自动记下。")
+        return
+
+    console.print(f"📌 待跟进（{len(open_items)} 件）：")
+    for c in open_items:
+        due = f" · {c.due_hint}" if c.due_hint else ""
+        job = f" [岗位 {c.job_id}]" if c.job_id else ""
+        console.print(f"  [{c.id}] {c.text}{due}{job}")
+    if closed:
+        console.print(f"\n（已自动闭环 {len(closed)} 件——对应岗位已投递）")
+    console.print("\n完成：jobpilot followup --done <id>　放弃：--drop <id>")

@@ -23,8 +23,10 @@ from jobpilot.models import Job, JobScore, Profile
 
 @pytest.fixture(autouse=True)
 def _isolate_chats(tmp_path, monkeypatch):
-    """Keep chat persistence out of the real data/chats during tests."""
+    """Keep chat persistence out of the real data/chats during tests, and never
+    hit the API for commitment extraction on exit (tests that care override it)."""
     monkeypatch.setattr(config, "CHATS_DIR", tmp_path / "chats")
+    monkeypatch.setattr("jobpilot.followup.extract_commitments", lambda history: [])
 
 
 def _ctx():
@@ -226,6 +228,62 @@ def test_run_chat_sliding_window_caps_api_context(monkeypatch):
         run_chat(db, profile_id=10, input_fn=lambda _="": next(inputs), output_fn=lambda _x: None)
 
     assert seen_lengths == [2]  # window capped to last 2, despite 5 total
+
+
+# ----------------------------------------------------------------------
+# run_chat — proactive follow-up (commitments)
+# ----------------------------------------------------------------------
+
+
+def test_run_chat_greets_open_commitments(monkeypatch):
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key")
+    from jobpilot.followup import Commitment
+    from jobpilot.followup_store import save_commitments
+
+    save_commitments(10, [Commitment.new("本周投字节", due_hint="本周")])
+    db = _mock_db()
+    db.get_application.return_value = None  # not applied → stays open
+    inputs = iter(["exit"])
+    outputs: list[str] = []
+
+    run_chat(db, profile_id=10, input_fn=lambda _="": next(inputs), output_fn=outputs.append)
+
+    joined = "\n".join(outputs)
+    assert "本周投字节" in joined          # proactively surfaced
+    assert "上次你提到" in joined
+
+
+def test_run_chat_auto_closes_applied_commitment(monkeypatch):
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key")
+    from jobpilot.followup import Commitment
+    from jobpilot.followup_store import load_commitments, save_commitments
+    from jobpilot.models import Application
+
+    save_commitments(10, [Commitment.new("投字节", job_id="j1")])
+    db = _mock_db()
+    db.get_application.return_value = Application(job_id="j1", status="applied")
+    inputs = iter(["exit"])
+
+    run_chat(db, profile_id=10, input_fn=lambda _="": next(inputs), output_fn=lambda _x: None)
+
+    assert load_commitments(10)[0].status == "done"  # closed because already applied
+
+
+def test_run_chat_captures_commitments_on_exit(monkeypatch):
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "key")
+    from jobpilot.followup import Commitment
+    from jobpilot.followup_store import load_commitments
+
+    db = _mock_db()
+    inputs = iter(["我想投字节", "exit"])
+
+    with patch("jobpilot.chat.generate_reply", return_value="好"), patch(
+        "jobpilot.followup.extract_commitments",
+        return_value=[Commitment.new("投字节")],
+    ):
+        run_chat(db, profile_id=10, input_fn=lambda _="": next(inputs), output_fn=lambda _x: None)
+
+    assert any(c.text == "投字节" for c in load_commitments(10))
 
 
 # ----------------------------------------------------------------------

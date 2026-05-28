@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![Claude API](https://img.shields.io/badge/Claude-API-D97757?logo=anthropic&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-428%20passing-3FB950)
+![Tests](https://img.shields.io/badge/tests-452%20passing-3FB950)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 AI-powered job hunting assistant for Chinese recruitment platforms.
@@ -24,7 +24,7 @@ Not a scraper — an intelligent layer on top of existing tools: AI matching, re
 - **Daily digest + email** — Surfaces only newly-discovered high-score jobs and stale-application follow-ups; optional local scheduling (launchd) + SMTP delivery
 - **Interview prep** — Likely questions per job mapped to STAR talking points grounded in your real resume
 - **Greeting messages** — Channel-specific opening messages (Boss / Xiaohongshu / email) from a configurable style guide; you send them yourself
-- **Job-hunt strategy companion (军师)** — `chat` is a multi-turn advisor with cross-session memory, grounded in your real data; `advisor` diagnoses your funnel for weekly actions; `plan` builds this week's apply list (deterministic); `ask` answers one-off questions in your situation
+- **Job-hunt strategy companion (军师)** — `chat` is a multi-turn advisor with cross-session memory, grounded in your real data; it proactively follows up on commitments you voiced ("you said you'd apply to ByteDance — did you?"), auto-closing them once the job is applied. `advisor` diagnoses your funnel for weekly actions; `plan` builds this week's apply list (deterministic); `ask` answers one-off questions; `followup` tracks open commitments
 - **Eval-driven scoring** — `label` + `eval` measure agreement (precision/recall/F1) between AI scores and your own apply/skip decisions
 - **Web dashboard** — Next.js board: job cards, funnel chart, score distribution, and an advisor page
 - **Graceful degradation** — Heuristic scoring + prompt export when no API key
@@ -50,7 +50,7 @@ JobPilot is a **local, read-first, user-triggered** assistant. Deliberate bounda
 ## Architecture
 
 ```
-JobPilot CLI (25 commands; cli.py is a thin shell → commands/*)
+JobPilot CLI (26 commands; cli.py is a thin shell → commands/*)
     ├── pipeline.py    — End-to-end orchestration (search→score→tailor→greeting→report), per-stage isolation
     │
     ├── AI Layer (Claude API)
@@ -109,8 +109,9 @@ jobpilot apply                         # 5. mark applied (human-in-the-loop)
 | `greeting <job_id> [-c boss\|xhs\|email]` | Channel-specific opening message for the HR (you send it) |
 | `advisor` | Strategy advisor — diagnoses your real funnel and gives this week's actions |
 | `ask "<question>"` | Job-search Q&A grounded in your situation + preferences |
-| `chat [--job <id>] [--new]` | Real-time multi-turn advisor with cross-session memory |
+| `chat [--job <id>] [--new]` | Real-time multi-turn advisor with cross-session memory + proactive follow-up |
 | `plan [--target N]` | This week's apply list (deterministic) + follow-up reminders |
+| `followup [--done <id>] [--drop <id>]` | Track commitments voiced in chat; auto-closes once a job is applied |
 | `import-xhs <json> [--score]` | Import Xiaohongshu favorites |
 | `apply` | Interactive batch apply |
 | `pipeline` | Funnel statistics |
@@ -189,7 +190,7 @@ JobPilot works without an API key:
 ## Tests
 
 ```bash
-python -m pytest tests/   # 428 tests
+python -m pytest tests/   # 452 tests
 ```
 
 ## License
