@@ -38,7 +38,8 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 24: 策略诊断军师 advisor（advisor.py：诊断层 diagnose 确定性算 6 信号[漏斗/高分岗缺口/停滞/定制覆盖/投递节奏/数据量门槛]+建议层 generate_advice LLM 翻人话，无 key 降级导出 prompt；诚实护栏：投递<ADVISOR_MIN_APPLICATIONS(5) 时改口"先投起来"不硬编转化分析）+ jobpilot advisor 命令 + db.count_jobs_by_status（05-28，378 tests）
 - Phase 25: 对话答疑军师 ask（ask.py：gather_context 收集诊断+高分岗+可选岗位，build_ask_prompt 注入真实处境+偏好，结合数据回答 offer/薪资/HR 问题；--job 注入具体 JD+评分；无 key 降级导出 prompt）+ jobpilot ask 命令 + **修复偏好取错源 bug**（advisor/ask 原从 profile.structured 取偏好[空]，改为回退 scorer._load_preferences 读 resume_config.yaml + 修正 key 名 cities→preferred_cities/values→priorities）（05-28，391 tests）
 - Phase 26: 投递计划军师 plan（planner.py：build_weekly_plan 确定性算本周投递清单[待投高分岗 scored/tailored 按分排序+ready 标记+理由]+跟进清单[停滞投递按天数倒序]+节奏提示，PLAN_WEEKLY_TARGET 截断；format_plan_markdown 渲染；**纯确定性不烧 API**）+ jobpilot plan 命令（--target 覆盖目标数）（05-28，402 tests）。军师三刀齐：advisor 诊断+ask 答疑+plan 计划
-- Phase 27: 军师上 Web demo（demo_export.advisor_snapshot 把诊断+周计划序列化成 JSON+export_advisor_snapshot.py 脚本[有 key 顺带真生成 advice]→web/demo-data/advisor.json；web /advisor 页[headline+信号卡+周计划表+MiniMarkdown 渲染 advice]+NavBar"求职军师"入口；refresh_demo.sh 加导出步；MiniMarkdown 极简组件免依赖）（05-28，408 tests，npm build 1055 页过）
+- Phase 27: 军师上 Web demo（demo_export.advisor_snapshot 把诊断+周计划序列化成 JSON+export_advisor_snapshot.py 脚本[有 key 顺带真生成 advice]→web/demo-data/advisor.json；web /advisor 页[headline+信号卡+周计划表+MiniMarkdown 渲染 advice]+NavBar"求职军师"入口；refresh_demo.sh 加导出步；MiniMarkdown 极简组件免依赖）（05-28，408 tests，npm build 1055 页过）→ 已部署 https://web-ten-omega-72.vercel.app/advisor
+- Phase 28: 实时对话军师 chat（chat.py：build_system_prompt 把诊断+偏好+高分岗灌进 system，run_chat REPL 维护 messages 历史多轮对话+记忆上文，generate_reply 调 API[system+history]；复用 ask.gather_context grounding；input_fn/output_fn 可注入便于测试；退出词 exit/q/bye/退出；EOF/Ctrl-C 优雅退出；无 key 抛 ChatError 实时对话不降级）+ jobpilot chat 命令（--job 锚定岗位）（05-28，417 tests）。真实端到端：两轮对话记忆生效，第二轮承接第一轮推荐具体岗位
 
 ## 关键数据
 
@@ -81,6 +82,28 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 实时对话军师 Phase 28（2026-05-28）
+
+**需求澄清**：用户原意不是几个独立命令，而是「像 Claude 这样能实时多轮聊、记得上文」的对话军师。之前的 ask 是一问一答无记忆，理解窄了。本 Phase 补上真·多轮对话。载体经询问选定 CLI（Web 实时聊天需后端+API key 上线+防滥用，暂缓）。
+
+**实现**：
+- `build_system_prompt(profile, context)` — 把诊断+偏好+高分岗灌进 system prompt，定军师人设（多轮、记上文、讲人话、不知道就说不知道、主动反问）
+- `run_chat(db, profile_id, job_id, *, input_fn, output_fn)` — REPL 循环，维护 messages 历史（user/assistant 交替累积=记忆），input_fn/output_fn 可注入便于单测；退出词 exit/q/bye/退出；EOF/Ctrl-C 优雅退出；API 出错丢掉未答 turn 保持 history 一致
+- `generate_reply(history, system)` — 调 API（system=人设+grounding, messages=完整历史），ChatError 包装失败
+- 复用 ask.gather_context（诊断+top10高分岗+可选岗位）做 grounding；复用 advisor._format_preferences
+- **无 key 抛 ChatError**：实时对话不能降级导出 prompt（设计取舍）
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/chat.py` | 新建。ChatError + build_system_prompt + generate_reply + run_chat |
+| `src/jobpilot/cli.py` | 新增 chat 命令（薄封装，--job 锚定岗位，output_fn→console.print） |
+| `tests/test_chat.py` + `tests/test_cli_chat.py` | +9 测试（系统prompt/多轮历史累积/退出词/空输入跳过/无key/EOF/API契约/CLI封装） |
+
+**测试**：408 → 417（+9），全过（1.6s）。**真实端到端烟测**：注入两轮["海投还是只投高分岗"→"那建议先投哪个"]，记忆生效——第二轮承接第一轮提到的字节/智谱/阿里，挑字节并给理由+末尾反问。质量高、讲人话、点名真实岗位。
+
+**可选后续**：①对话记忆跨 session 持久化（存 data/chats/，"接着上次聊"）②把 chat 也搬上 Web（需后端 serverless+key 上线+限流，用户暂缓）。现在 ask（一次性）+ chat（多轮）并存，chat 是用户真正想要的形态。cli.py 拆分技术债仍挂着（已有独立卡）。
 
 ### 军师上 Web demo Phase 27（2026-05-28）
 

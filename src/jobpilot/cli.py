@@ -630,6 +630,29 @@ def advisor(
 
 
 @app.command()
+def chat(
+    profile_id: int = typer.Option(config.DEFAULT_PROFILE_ID, "--profile", "-p", help="Profile ID"),
+    job_id: str = typer.Option("", "--job", "-j", help="围绕某个具体岗位聊（注入 JD+评分）"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """实时对话军师：多轮聊天、记得上文，懂你全部求职数据（输入 exit / q 退出）。"""
+    _setup_logging(verbose)
+    from jobpilot.chat import ChatError, run_chat
+
+    db = _get_db()
+    try:
+        run_chat(
+            db,
+            profile_id,
+            job_id or None,
+            output_fn=lambda s: console.print(s),
+        )
+    except ChatError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
 def plan(
     profile_id: int = typer.Option(config.DEFAULT_PROFILE_ID, "--profile", "-p", help="Profile ID"),
     target: int = typer.Option(0, "--target", "-t", help="本周投递目标数（0=用默认配置）"),

@@ -1,0 +1,159 @@
+"""
+Conversational chat advisor (jobpilot chat).
+
+A real multi-turn chat with a job-hunt 军师 that remembers the conversation and
+knows the user's actual situation — diagnosis, preferences, high-score jobs are
+loaded once into the system prompt, then the dialogue accrues turn by turn.
+
+Unlike `ask` (one-shot Q&A), this keeps history, so "那个字节的岗位" resolves
+against earlier turns. Chat needs an API key — there's no offline fallback for a
+live conversation.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Callable
+
+from jobpilot import config
+from jobpilot.advisor import _format_preferences
+from jobpilot.ask import AskContext, gather_context
+from jobpilot.db import JobPilotDB
+from jobpilot.models import Profile
+
+logger = logging.getLogger(__name__)
+
+_QUIT_WORDS = frozenset({"exit", "quit", "q", "bye", "退出", "再见"})
+
+# Message = {"role": "user"|"assistant", "content": str}
+Message = dict[str, str]
+
+
+class ChatError(RuntimeError):
+    """Raised when chat cannot run (e.g. no API key) or the API call fails."""
+
+
+def _format_top_jobs(top_jobs: tuple[tuple[str, float], ...]) -> str:
+    if not top_jobs:
+        return "(暂无高分岗)"
+    return "\n".join(f"  - [{score:.1f}] {label}" for label, score in top_jobs)
+
+
+SYSTEM_PROMPT = """\
+你是用户的私人求职军师，长期陪伴一名在校生冲刺 AI 产品经理实习。
+你了解 ta 的全部求职数据（下面给出），像一个带过很多人、真正懂 ta 处境的学长。
+
+## ta 的当前处境（来自系统记录，不是估算）
+{headline}
+- 高分岗（>= {min_score:.0f}）：{high_score_total} 个，已投 {high_score_applied} 个
+- 投递总数：{total_applications}（回复 {replied} / 面试 {interview} / Offer {offer} / 被拒 {rejected}）
+
+## ta 的高分岗（可在对话中具体引用）
+{top_jobs}
+
+## ta 的偏好
+{preferences}
+
+## 你的对话风格
+- 这是多轮对话，记得上文。ta 说"那个岗位/上面说的"时，结合前面聊过的内容理解。
+- 讲人话，像聊天不像写报告。不堆名词、不灌鸡汤、不说正确的废话。
+- 紧扣 ta 的真实数据和偏好，能引用具体岗位/数字就引用。
+- 不知道的（公司内部情况、ta 没说过的事）就说不知道，别编。
+- 给可执行的下一步；信息不够时主动反问澄清，而不是猜。
+- 回答简洁，一次别倒太多，留出来回空间。
+"""
+
+
+def build_system_prompt(profile: Profile, context: AskContext) -> str:
+    """Build the chat system prompt that grounds the 军师 in the user's data."""
+    d = context.diagnosis
+    return SYSTEM_PROMPT.format(
+        headline=d.headline,
+        min_score=config.MIN_RECOMMEND_SCORE,
+        high_score_total=d.high_score_total,
+        high_score_applied=d.high_score_applied,
+        total_applications=d.total_applications,
+        replied=d.replied_count,
+        interview=d.interview_count,
+        offer=d.offer_count,
+        rejected=d.rejected_count,
+        top_jobs=_format_top_jobs(context.top_jobs),
+        preferences=_format_preferences(profile),
+    )
+
+
+def generate_reply(history: list[Message], system: str) -> str:
+    """Send the conversation to Claude and return the assistant's reply.
+
+    Raises:
+        ChatError: on API failure (caller checks the key before looping).
+    """
+    import anthropic
+
+    try:
+        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=config.ANTHROPIC_MODEL,
+            max_tokens=2048,
+            system=system,
+            messages=history,
+        )
+    except Exception as exc:  # noqa: BLE001 - surface as domain error
+        logger.exception("Chat API call failed")
+        raise ChatError(f"API 调用失败: {exc}") from exc
+
+    return message.content[0].text.strip()
+
+
+def run_chat(
+    db: JobPilotDB,
+    profile_id: int = config.DEFAULT_PROFILE_ID,
+    job_id: str | None = None,
+    *,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+) -> None:
+    """Run the interactive chat REPL.
+
+    input_fn/output_fn are injectable for testing. History lives in memory for
+    the session (persistence across runs is a future enhancement).
+
+    Raises:
+        ChatError: when no API key is configured.
+    """
+    if not config.ANTHROPIC_API_KEY:
+        raise ChatError(
+            "未配置 ANTHROPIC_API_KEY。实时对话需要 API；可改用 jobpilot ask 导出 prompt。"
+        )
+
+    profile = db.get_profile(profile_id) or Profile(id=profile_id)
+    context = gather_context(db, profile_id, job_id)
+    system = build_system_prompt(profile, context)
+
+    output_fn("🧭 求职军师已就位，问我任何求职问题（输入 exit / q 退出）。")
+    output_fn(f"   我知道你的处境：{context.diagnosis.headline}")
+
+    history: list[Message] = []
+    while True:
+        try:
+            user_text = input_fn("你> ")
+        except (EOFError, KeyboardInterrupt):
+            output_fn("\n👋 先聊到这，加油。")
+            break
+
+        stripped = user_text.strip()
+        if stripped.lower() in _QUIT_WORDS:
+            output_fn("👋 先聊到这，加油。")
+            break
+        if not stripped:
+            continue
+
+        history.append({"role": "user", "content": stripped})
+        try:
+            reply = generate_reply(history, system)
+        except ChatError as exc:
+            output_fn(f"[出错] {exc}")
+            history.pop()  # drop the unanswered turn so history stays consistent
+            continue
+        history.append({"role": "assistant", "content": reply})
+        output_fn(f"军师> {reply}")
