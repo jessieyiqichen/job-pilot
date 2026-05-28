@@ -65,7 +65,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 | GitHub Actions CI | `.github/workflows/ci.yml` | push/PR 跑 346 测试 + 覆盖率(77%)，codecov 上传 |
 | 合规边界声明 | README「Compliance & boundaries」 | 本地/只读/不自动投递/不自爬/低频/数据本地 |
 
-**测试 334→346（+12）。** 待用户：codecov badge 需到 codecov.io 连接仓库(免费1-click)才点亮；CI 状态 badge push 后自动生效。
+**测试 334→346（+12）。** ✅ codecov 已接入（05-28）：用户在 codecov.io 连接仓库 + 加 GitHub Secret `CODECOV_TOKEN`，ci.yml 加 `token: ${{ secrets.CODECOV_TOKEN }}`，CI 上传成功（queued for processing）→ badge 点亮。CI 状态 badge push 后自动生效。
 **遗留观察**：测试套件耗时从 ~1.3s 涨到 ~38s（疑似某 anthropic-mock 测试或适配器测试有网络/慢点，未定位）。非阻塞，后续可查 test isolation。
 
 ---
