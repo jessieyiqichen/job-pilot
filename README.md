@@ -1,5 +1,11 @@
 # JobPilot
 
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+![Claude API](https://img.shields.io/badge/Claude-API-D97757?logo=anthropic&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-333%20passing-3FB950)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 AI-powered job hunting assistant for Chinese recruitment platforms.
 
 Not a scraper — an intelligent layer on top of existing tools: AI matching, resume tailoring, application tracking, and a one-command automation pipeline, with a Next.js dashboard.
