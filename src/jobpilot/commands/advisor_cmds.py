@@ -8,6 +8,7 @@ import typer
 
 from jobpilot import cli, config
 from jobpilot.cli import _setup_logging, app, console
+from jobpilot.cognitive import format_cognitive_prompt, load_cognitive_profile
 
 
 @app.command()
@@ -39,7 +40,7 @@ def advisor(
 
     # No API key: export the prompt for a manual Claude.ai workflow.
     if not cli.config.ANTHROPIC_API_KEY:
-        prompt = build_advisor_prompt(d, profile)
+        prompt = build_advisor_prompt(d, profile, format_cognitive_prompt(load_cognitive_profile()))
         console.print(
             "[yellow]未配置 API key，以上为规则诊断；导出军师 prompt 供 Claude.ai：[/yellow]\n"
         )
@@ -135,7 +136,9 @@ def ask(
     # No API key: export the prompt for a manual Claude.ai workflow.
     if not cli.config.ANTHROPIC_API_KEY:
         context = gather_context(db, profile_id, pinned)
-        prompt = build_ask_prompt(question, profile, context)
+        prompt = build_ask_prompt(
+            question, profile, context, format_cognitive_prompt(load_cognitive_profile())
+        )
         console.print("[yellow]未配置 API key，导出 prompt 供 Claude.ai 手动使用：[/yellow]\n")
         console.print(prompt)
         return

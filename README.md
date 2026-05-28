@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![Claude API](https://img.shields.io/badge/Claude-API-D97757?logo=anthropic&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-452%20passing-3FB950)
+![Tests](https://img.shields.io/badge/tests-459%20passing-3FB950)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 AI-powered job hunting assistant for Chinese recruitment platforms.
@@ -25,6 +25,7 @@ Not a scraper — an intelligent layer on top of existing tools: AI matching, re
 - **Interview prep** — Likely questions per job mapped to STAR talking points grounded in your real resume
 - **Greeting messages** — Channel-specific opening messages (Boss / Xiaohongshu / email) from a configurable style guide; you send them yourself
 - **Job-hunt strategy companion (军师)** — `chat` is a multi-turn advisor with cross-session memory, grounded in your real data; it proactively follows up on commitments you voiced ("you said you'd apply to ByteDance — did you?"), auto-closing them once the job is applied. `advisor` diagnoses your funnel for weekly actions; `plan` builds this week's apply list (deterministic); `ask` answers one-off questions; `followup` tracks open commitments
+- **Cognitive grounding (optional)** — When a Nous cognitive model (a sibling cognitive-modeling project) is present, the advisor grounds its guidance in *how you actually decide* (decision architecture, blind spots, value hierarchy), not just job data — e.g. reframing "0 applications despite 19 tailored resumes" as a high-standards blind spot rather than nagging you to "just apply". Degrades gracefully when absent.
 - **Eval-driven scoring** — `label` + `eval` measure agreement (precision/recall/F1) between AI scores and your own apply/skip decisions
 - **Web dashboard** — Next.js board: job cards, funnel chart, score distribution, and an advisor page
 - **Graceful degradation** — Heuristic scoring + prompt export when no API key
@@ -61,7 +62,9 @@ JobPilot CLI (26 commands; cli.py is a thin shell → commands/*)
     │   ├── greeting.py  — Channel-specific HR opening messages
     │   ├── advisor.py   — Funnel diagnosis (deterministic) + weekly advice
     │   ├── ask.py       — Situation-grounded job-search Q&A
-    │   └── chat.py      — Multi-turn advisor + cross-session memory (chat_store.py)
+    │   ├── chat.py      — Multi-turn advisor + cross-session memory (chat_store.py)
+    │   ├── followup.py  — Extract & track commitments voiced in chat
+    │   └── cognitive.py — Optional Nous cognitive-model grounding (how you think)
     │
     ├── Adapter Layer
     │   ├── websearch.py   — Anthropic web_search tool (default)
@@ -190,7 +193,7 @@ JobPilot works without an API key:
 ## Tests
 
 ```bash
-python -m pytest tests/   # 452 tests
+python -m pytest tests/   # 459 tests
 ```
 
 ## License

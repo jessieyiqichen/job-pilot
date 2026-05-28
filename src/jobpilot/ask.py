@@ -105,6 +105,7 @@ ASK_PROMPT = """\
 
 ## 用户偏好
 {preferences}
+{cognitive}
 {job_context}
 ## 问题
 {question}
@@ -118,8 +119,14 @@ ASK_PROMPT = """\
 """
 
 
-def build_ask_prompt(question: str, profile: Profile, context: AskContext) -> str:
-    """Build the ask prompt (pure, testable, no API call)."""
+def build_ask_prompt(
+    question: str, profile: Profile, context: AskContext, cognitive: str = ""
+) -> str:
+    """Build the ask prompt (pure, testable, no API call).
+
+    `cognitive` is an optional Nous cognitive-profile block; when present the
+    answer is grounded in how the user thinks, not just their job data.
+    """
     d = context.diagnosis
     return ASK_PROMPT.format(
         headline=d.headline,
@@ -133,6 +140,7 @@ def build_ask_prompt(question: str, profile: Profile, context: AskContext) -> st
         rejected=d.rejected_count,
         top_jobs=_format_top_jobs(context.top_jobs),
         preferences=_format_preferences(profile),
+        cognitive=cognitive,
         job_context=_format_job_context(context.job, context.score),
         question=question,
     )
@@ -155,9 +163,12 @@ def answer_question(
             "未配置 ANTHROPIC_API_KEY。可用 build_ask_prompt 导出 prompt 到 Claude.ai。"
         )
 
+    from jobpilot.cognitive import format_cognitive_prompt, load_cognitive_profile
+
     profile_id = profile.id or config.DEFAULT_PROFILE_ID
     context = gather_context(db, profile_id, job_id)
-    prompt = build_ask_prompt(question, profile, context)
+    cognitive = format_cognitive_prompt(load_cognitive_profile())
+    prompt = build_ask_prompt(question, profile, context, cognitive)
 
     import anthropic
 

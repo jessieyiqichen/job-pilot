@@ -42,6 +42,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 28: 实时对话军师 chat（chat.py：build_system_prompt 把诊断+偏好+高分岗灌进 system，run_chat REPL 维护 messages 历史多轮对话+记忆上文，generate_reply 调 API[system+history]；复用 ask.gather_context grounding；input_fn/output_fn 可注入便于测试；退出词 exit/q/bye/退出；EOF/Ctrl-C 优雅退出；无 key 抛 ChatError 实时对话不降级）+ jobpilot chat 命令（--job 锚定岗位）（05-28，417 tests）。真实端到端：两轮对话记忆生效，第二轮承接第一轮推荐具体岗位
 - Phase 29: chat 记忆跨 session 持久化（chat_store.py：load/save/clear_history per-profile JSON 存 data/chats/[gitignored]，原子写，malformed 容错丢弃；run_chat resume=True 默认接续历史，全量存盘+滑动窗口 CHAT_MAX_CONTEXT_MESSAGES(30) 喂 API 控 token；--new 重开）（05-28，428 tests）。真实跨进程烟测：第二次重启准确记起第一次说的"成长空间>薪资"
 - Phase 30: 军师主动跟进 followup（followup.py：Commitment(frozen)+extract_commitments[LLM 从对话提取行动意图,JSON]+reconcile_with_applications[投了的自动闭环,确定性]；followup_store.py JSON 持久化；chat 集成：退出自动提取承诺存盘+开场主动提 open 承诺并注入 system；jobpilot followup 命令[列出/--done/--drop]）（05-28，452 tests）。真实端到端：聊"这周投字节+改简历"→退出记下2件→下次开场主动问"做了吗"，直击 0 投递断点
+- Phase 31: 认知军师——接入 Nous 认知模型（跨项目集成 cognitive.py：读 ../nous/data/subjects/jessie/cognitive_model_v2.json[9维认知建模]，format_cognitive_prompt 带使用守则[不贴标签/不诊断人格/帮建框架+允许good-enough]；注入 chat/advisor/ask 的 prompt；缺文件优雅降级；COGNITIVE_MODEL_PATH env 可配）（05-28，459 tests）。真实验证：advisor 对 0 投递的诊断从"先投起来"升级为"收敛了标准但没给启动许可"[命中决策架构+高标准盲区]，给 45 分钟倒计时+good-enough 框架，未越界念模型
 
 ## 关键数据
 
@@ -84,6 +85,23 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 
 > CLI session 完成任务后在这里写摘要，Opus session 会来 review。清空区域表示已读。
+
+### 认知军师：接入 Nous 认知模型 Phase 31（2026-05-28）
+
+**需求**：用户说"想了解我怎么想，看 nous 项目"。Nous（../nous）是用户做的认知层 AI 建模——理解人怎么决策、盲区在哪，而非行为层模仿。用户想让军师有这种认知深度。看了她本人的 cognitive_model_v2.json（9 维），它直接解释了 0 投递：不是拖延，是 Decision Architecture（框架收敛才行动）+ Blind Spots（在乎的领域用不可持续高标准、低估 good-enough）。普通行为层 push（"先投"）对她无效。用户选「全面接入」。
+
+**实现（跨项目集成）**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/cognitive.py` | 新建。CognitiveProfile/CognitiveDimension(frozen) + load_cognitive_profile（读 Nous JSON，缺失/corrupt/空→None 优雅降级）+ format_cognitive_prompt（summary+9维 description + **使用守则**：不贴标签/不当面诊断人格/用它调整建议方式[卡住时帮建框架+允许 good-enough]/点到为止）|
+| `src/jobpilot/config.py` | 新增 COGNITIVE_MODEL_PATH（默认 ../nous/.../jessie/cognitive_model_v2.json，env 可覆盖）|
+| `src/jobpilot/chat.py` `advisor.py` `ask.py` | build_*_prompt 加可选 cognitive 参数（保持纯函数）；run_chat/generate_advice/answer_question load+注入；缺模型退回纯求职 grounding |
+| `src/jobpilot/commands/advisor_cmds.py` | advisor/ask 导出 prompt 降级路径也带认知 |
+| `tests/test_cognitive.py`(+7) + test_chat fixture mock load | +7 测试 |
+
+**测试**：452 → 459（+7），全过。test_chat fixture 加 mock load_cognitive_profile→None 防读真实模型。**真实验证**：advisor 读真 Nous 模型后，对 0 投递诊断从"先投起来"升级为"收敛了标准但没给自己启动许可"（命中决策架构+高标准盲区），给"45 分钟倒计时/标准是可发出去不是完美"，未越界念模型/贴标签——守则有效。
+
+**设计原则**：单一事实来源在 Nous（job-pilot 只读）；纯函数（build 加 cognitive 参数）+ orchestration 层 load；隐私=两项目都本地、认知模型不入 job-pilot 仓。**可选后续**：①Web 军师页也体现认知洞察 ②Nous 被动收集器已在跑[com.nous.collector]，认知模型会更新，军师自动受益（flywheel）③矛盾检测[stated vs behavioral]直接喂军师戳盲区。
 
 ### 军师主动跟进 followup Phase 30（2026-05-28）
 

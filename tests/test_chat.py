@@ -27,6 +27,8 @@ def _isolate_chats(tmp_path, monkeypatch):
     hit the API for commitment extraction on exit (tests that care override it)."""
     monkeypatch.setattr(config, "CHATS_DIR", tmp_path / "chats")
     monkeypatch.setattr("jobpilot.followup.extract_commitments", lambda history: [])
+    # don't read the real Nous cognitive model during tests
+    monkeypatch.setattr("jobpilot.chat.load_cognitive_profile", lambda path=None: None)
 
 
 def _ctx():

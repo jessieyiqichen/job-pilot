@@ -98,6 +98,13 @@ PLAN_WEEKLY_TARGET: int = int(os.environ.get("JOBPILOT_PLAN_WEEKLY_TARGET", "5")
 # Chat: full history is persisted, but only the most recent N messages are sent
 # to the API each turn (sliding window) to keep token cost bounded.
 CHAT_MAX_CONTEXT_MESSAGES: int = int(os.environ.get("JOBPILOT_CHAT_MAX_CONTEXT", "30"))
+# Cognitive profile (from the sibling Nous project) — lets the advisor ground its
+# guidance in how the user actually thinks, not just their job data. Optional:
+# if the file is absent the advisor degrades to job-data-only grounding.
+COGNITIVE_MODEL_PATH: str = os.environ.get(
+    "JOBPILOT_COGNITIVE_MODEL",
+    str(BASE_DIR.parent / "nous" / "data" / "subjects" / "jessie" / "cognitive_model_v2.json"),
+)
 
 # ============================================================
 # Email delivery (SMTP) — secrets come from env / .env, never committed

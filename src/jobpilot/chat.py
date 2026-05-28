@@ -19,6 +19,7 @@ from jobpilot import config, followup
 from jobpilot.advisor import _format_preferences
 from jobpilot.ask import AskContext, gather_context
 from jobpilot.chat_store import load_history, save_history
+from jobpilot.cognitive import format_cognitive_prompt, load_cognitive_profile
 from jobpilot.db import JobPilotDB
 from jobpilot.followup_store import add_commitments, load_commitments, save_commitments
 from jobpilot.models import Profile
@@ -55,7 +56,7 @@ SYSTEM_PROMPT = """\
 
 ## ta 的偏好
 {preferences}
-
+{cognitive}
 ## 你的对话风格
 - 这是多轮对话，记得上文。ta 说"那个岗位/上面说的"时，结合前面聊过的内容理解。
 - 讲人话，像聊天不像写报告。不堆名词、不灌鸡汤、不说正确的废话。
@@ -66,8 +67,12 @@ SYSTEM_PROMPT = """\
 """
 
 
-def build_system_prompt(profile: Profile, context: AskContext) -> str:
-    """Build the chat system prompt that grounds the 军师 in the user's data."""
+def build_system_prompt(profile: Profile, context: AskContext, cognitive: str = "") -> str:
+    """Build the chat system prompt that grounds the 军师 in the user's data.
+
+    `cognitive` is an optional Nous cognitive-profile block (see cognitive.py);
+    when present the 军师 understands *how the user thinks*, not just their data.
+    """
     d = context.diagnosis
     return SYSTEM_PROMPT.format(
         headline=d.headline,
@@ -81,6 +86,7 @@ def build_system_prompt(profile: Profile, context: AskContext) -> str:
         rejected=d.rejected_count,
         top_jobs=_format_top_jobs(context.top_jobs),
         preferences=_format_preferences(profile),
+        cognitive=cognitive,
     )
 
 
@@ -183,7 +189,8 @@ def run_chat(
 
     profile = db.get_profile(profile_id) or Profile(id=profile_id)
     context = gather_context(db, profile_id, job_id)
-    system = build_system_prompt(profile, context)
+    cognitive = format_cognitive_prompt(load_cognitive_profile())
+    system = build_system_prompt(profile, context, cognitive)
 
     history: list[Message] = load_history(profile_id) if resume else []
 

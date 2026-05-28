@@ -277,7 +277,7 @@ ADVISOR_PROMPT = """\
 
 ## 用户偏好
 {preferences}
-
+{cognitive}
 ## 要求
 1. 先认可已经做对的部分（如果有），再指出最该改的一件事——只挑最重要的一两个瓶颈，别列十条。
 2. 给本周 3-5 个具体动作，每条都要能当天就做（例：「把这 5 个高分岗投掉」而不是「提升匹配度」）。
@@ -288,8 +288,12 @@ ADVISOR_PROMPT = """\
 """
 
 
-def build_advisor_prompt(d: StrategyDiagnosis, profile: Profile) -> str:
-    """Build the advisor prompt (pure, testable, no API call)."""
+def build_advisor_prompt(d: StrategyDiagnosis, profile: Profile, cognitive: str = "") -> str:
+    """Build the advisor prompt (pure, testable, no API call).
+
+    `cognitive` is an optional Nous cognitive-profile block; when present the
+    advice is tuned to how the user actually decides, not just their job data.
+    """
     return ADVISOR_PROMPT.format(
         headline=d.headline,
         min_score=config.MIN_RECOMMEND_SCORE,
@@ -305,6 +309,7 @@ def build_advisor_prompt(d: StrategyDiagnosis, profile: Profile) -> str:
         recent_applied=d.recent_applied,
         stale=d.stale_count,
         preferences=_format_preferences(profile),
+        cognitive=cognitive,
     )
 
 
@@ -322,7 +327,10 @@ def generate_advice(d: StrategyDiagnosis, profile: Profile) -> str:
             "或 build_advisor_prompt 导出 prompt 到 Claude.ai。"
         )
 
-    prompt = build_advisor_prompt(d, profile)
+    from jobpilot.cognitive import format_cognitive_prompt, load_cognitive_profile
+
+    cognitive = format_cognitive_prompt(load_cognitive_profile())
+    prompt = build_advisor_prompt(d, profile, cognitive)
 
     import anthropic
 
