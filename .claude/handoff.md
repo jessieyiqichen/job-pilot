@@ -39,7 +39,9 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - [x] Phase 13: 日报增强（#1 新岗 digest + #2 跟进提醒）
 - [x] Phase 14: 定时跑（本地 launchd + 邮件 digest）— #1 调度部分。⚠️ 待用户：填 .env（SMTP 凭证）+ 给定时时间 → 我 launchctl load 并发一封测试邮件
 - [x] Phase 16: 面试准备生成器（高分岗+简历 → 面试题+STAR 要点）— #3 完成
-- [ ] Phase 17: 反馈驱动评分校准（投递/跳过决策 → 调偏好权重）— #4，过度工程风险，克制。建议先做轻量 eval（打分一致性度量）做底座
+- [~] Phase 17: #4 反馈驱动评分校准
+  - [x] 17a: `jobpilot eval` 打分一致性度量（eval.py，precision/recall/F1）— 底座完成
+  - [ ] 17b: 校准（调权重）— **gated：需要真实标签**（0 投递记录 + 无标注文件），无数据不硬调。下一步给用户做标注入口（交互式 label 或预填模板）
 - [ ] 待用户：定时器装上（填 .env SMTP + 给时间 → launchctl load + 测试邮件）
 
 ## Review 备注
@@ -164,6 +166,24 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 **测试**：307 → 320（+13），全过。真实端到端烟测：env 无 API key，走降级导出路径，真实 JD+简历正确注入 prompt（API 路径 mock 单测覆盖）。
 
 **注意**：当前 shell 的 ANTHROPIC_API_KEY 未设置（CLAUDE.md 说已充值，但需在 env/.env 配置才走 API 生成；否则导出 prompt 供 Claude.ai 手动用）。
+
+### #4 第一步：打分一致性 eval Phase 17a（2026-05-28）
+
+**思路**：先度量后校准。校准前必须有"打分准不准"的指标，否则瞎调。
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/eval.py` | 新建。load_labels（投递状态 applied/offer=1, rejected=0 + 手动文件覆盖）+ EvalResult（precision/recall/F1/accuracy，零除安全）+ evaluate（混淆矩阵，只算有评分的标注岗） |
+| `src/jobpilot/cli.py` | 新增 eval 命令（--threshold/--labels，输出指标+混淆矩阵+低分诊断提示） |
+| `.gitignore` | data/eval_labels.json（个人判断不入仓） |
+| `tests/test_eval.py` | +7 测试 |
+
+**测试**：320 → 327（+7），全过。eval 无标签时给引导。
+
+**17b 校准 gated**：当前 0 投递 + 无标注文件 → 无 ground truth。下一步需先做"标注入口"（交互式 label 命令 or 预填高/中/低分岗模板让用户快速标 1/0），有了标签 eval 才能跑、校准才有依据。未在无数据时硬造校准逻辑（避免过度工程）。
+
+**已为用户打开**：Anthropic Console API Keys 页（console.anthropic.com/settings/keys）供取 ANTHROPIC_API_KEY 填 .env。
 
 ### 新一轮XHS搜索（2026-05-06）
 

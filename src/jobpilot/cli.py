@@ -929,6 +929,50 @@ def stats(
     console.print(table)
 
 
+@app.command(name="eval")
+def eval_cmd(
+    threshold: float = typer.Option(7.0, "--threshold", "-t", help="判正阈值（AI分>=此值视为推荐）"),
+    labels: str = typer.Option(
+        "data/eval_labels.json", "--labels", "-l", help="手动标注文件 {job_id: 1|0}"
+    ),
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """评估 AI 打分与你真实判断的一致性（precision/recall/F1）。"""
+    _setup_logging(verbose)
+    from jobpilot.eval import evaluate, load_labels
+
+    db = _get_db()
+    label_map = load_labels(db, labels_path=labels or None, profile_id=profile_id)
+    if not label_map:
+        console.print("[yellow]没有可用标签。两种来源：[/yellow]")
+        console.print("  1. 投递记录（applied/offer=想投，rejected=不投）—— 用 jobpilot apply")
+        console.print(f"  2. 手动标注文件 {labels}，格式 {{\"<job_id>\": 1, \"<job_id>\": 0}}")
+        return
+
+    result = evaluate(db, label_map, threshold=threshold, profile_id=profile_id)
+    if result.n == 0:
+        console.print("[yellow]标签里的岗位都还没评分，先 jobpilot score。[/yellow]")
+        return
+
+    console.print(f"\n[bold]📊 打分一致性评估[/bold]（阈值 >= {threshold}，样本 {result.n}）\n")
+    table = Table(show_header=True)
+    table.add_column("指标", style="bold")
+    table.add_column("值", justify="right")
+    table.add_row("Precision（推荐里你真想投的比例）", f"{result.precision:.0%}")
+    table.add_row("Recall（你想投的里被推荐的比例）", f"{result.recall:.0%}")
+    table.add_row("F1", f"{result.f1:.2f}")
+    table.add_row("Accuracy", f"{result.accuracy:.0%}")
+    console.print(table)
+    console.print(
+        f"[dim]混淆矩阵: TP={result.tp} FP={result.fp} FN={result.fn} TN={result.tn}[/dim]"
+    )
+    if result.precision < 0.6:
+        console.print("[yellow]→ Precision 偏低：高分岗里不少你其实不想投，可调高阈值或权重。[/yellow]")
+    if result.recall < 0.6:
+        console.print("[yellow]→ Recall 偏低：你想投的被漏判，可调低阈值或检查偏好。[/yellow]")
+
+
 @app.command()
 def version() -> None:
     """Show version."""
