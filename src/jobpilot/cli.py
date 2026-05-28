@@ -130,10 +130,16 @@ def search(
     _setup_logging(verbose)
     from jobpilot.adapters.base import SearchFilters
     from jobpilot.adapters.boss import BossAdapter
+    from jobpilot.adapters.github_jobs import GitHubAdapter
     from jobpilot.adapters.websearch import WebSearchAdapter
     from jobpilot.adapters.xhs_search import XHSSearchAdapter
 
-    adapters = {"boss": BossAdapter, "websearch": WebSearchAdapter, "xhs": XHSSearchAdapter}
+    adapters = {
+        "boss": BossAdapter,
+        "websearch": WebSearchAdapter,
+        "xhs": XHSSearchAdapter,
+        "github": GitHubAdapter,
+    }
     adapter_cls = adapters.get(platform)
     if not adapter_cls:
         console.print(f"[red]Unknown platform: {platform}. Available: {list(adapters.keys())}[/red]")

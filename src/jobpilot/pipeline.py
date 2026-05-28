@@ -115,10 +115,15 @@ def _search_stage(db: JobPilotDB, cfg: PipelineConfig) -> tuple[StageResult, int
     abort the others.
     """
     from jobpilot.adapters.base import SearchFilters
+    from jobpilot.adapters.github_jobs import GitHubAdapter
     from jobpilot.adapters.websearch import WebSearchAdapter
     from jobpilot.adapters.xhs_search import XHSSearchAdapter
 
-    registry = {"websearch": WebSearchAdapter, "xhs": XHSSearchAdapter}
+    registry = {
+        "websearch": WebSearchAdapter,
+        "xhs": XHSSearchAdapter,
+        "github": GitHubAdapter,
+    }
     filters = SearchFilters(city=cfg.city)
     total = 0
     errors: list[str] = []

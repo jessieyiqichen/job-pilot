@@ -33,6 +33,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 20: 个人风格打招呼话术重写（固定自我介绍模板 from resume_config + LLM 只生成钩子 + 风格自检）+ 修复 .env 自动加载导致测试打真实 API 的隔离 bug（conftest 强制 key 空，73s→1.7s）（05-28，350 tests）
 - Phase 21: greeting 接入 pipeline-all（第 5 个 stage _greeting_stage，对 top N 高分岗生成话术存 data/greetings/，--greeting N 控制，缺模板优雅跳过）（05-28，353 tests）
 - Phase 22: greeting 渠道差异化 + 可配置 style guide（boss短+截图配文/xhs自然/email正式带主题+签名；formality 正式度校准；interaction_rules HR互动规则；全在 resume_config.yaml greeting 段，改偏好只动配置）（05-28，354 tests）
+- Phase 23: GitHub 招聘渠道适配器（adapters/github_jobs.py，gh search issues 官方API+AI抽取，合规不爬；接入 search/pipeline；broaden_query 去 job-type/城市词防 AND 过窄）（05-28，362 tests）。⚠️ 通用 issue 搜索低产（实测净抓 1 条）——ruanyf/weekly 岗位在评论里搜不到；提产需做评论抽取（用户已 defer）
 
 ## 关键数据
 
