@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![Claude API](https://img.shields.io/badge/Claude-API-D97757?logo=anthropic&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-391%20passing-3FB950)
+![Tests](https://img.shields.io/badge/tests-428%20passing-3FB950)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 AI-powered job hunting assistant for Chinese recruitment platforms.
@@ -24,9 +24,9 @@ Not a scraper — an intelligent layer on top of existing tools: AI matching, re
 - **Daily digest + email** — Surfaces only newly-discovered high-score jobs and stale-application follow-ups; optional local scheduling (launchd) + SMTP delivery
 - **Interview prep** — Likely questions per job mapped to STAR talking points grounded in your real resume
 - **Greeting messages** — Channel-specific opening messages (Boss / Xiaohongshu / email) from a configurable style guide; you send them yourself
-- **Strategy advisor & Q&A** — `advisor` diagnoses your real funnel for weekly actions; `ask` answers job-search questions grounded in your situation
+- **Job-hunt strategy companion (军师)** — `chat` is a multi-turn advisor with cross-session memory, grounded in your real data; `advisor` diagnoses your funnel for weekly actions; `plan` builds this week's apply list (deterministic); `ask` answers one-off questions in your situation
 - **Eval-driven scoring** — `label` + `eval` measure agreement (precision/recall/F1) between AI scores and your own apply/skip decisions
-- **Web dashboard** — Next.js board: job cards, funnel chart, score distribution
+- **Web dashboard** — Next.js board: job cards, funnel chart, score distribution, and an advisor page
 - **Graceful degradation** — Heuristic scoring + prompt export when no API key
 
 ## What it does NOT do
@@ -50,7 +50,7 @@ JobPilot is a **local, read-first, user-triggered** assistant. Deliberate bounda
 ## Architecture
 
 ```
-JobPilot CLI (24 commands)
+JobPilot CLI (25 commands; cli.py is a thin shell → commands/*)
     ├── pipeline.py    — End-to-end orchestration (search→score→tailor→greeting→report), per-stage isolation
     │
     ├── AI Layer (Claude API)
@@ -59,8 +59,9 @@ JobPilot CLI (24 commands)
     │   ├── tailor.py    — Proficiently methodology + docx patch
     │   ├── interview.py — Interview questions + STAR talking points
     │   ├── greeting.py  — Channel-specific HR opening messages
-    │   ├── advisor.py   — Funnel diagnosis + weekly actions
-    │   └── ask.py       — Situation-grounded job-search Q&A
+    │   ├── advisor.py   — Funnel diagnosis (deterministic) + weekly advice
+    │   ├── ask.py       — Situation-grounded job-search Q&A
+    │   └── chat.py      — Multi-turn advisor + cross-session memory (chat_store.py)
     │
     ├── Adapter Layer
     │   ├── websearch.py   — Anthropic web_search tool (default)
@@ -69,12 +70,12 @@ JobPilot CLI (24 commands)
     │   ├── github_jobs.py — GitHub hiring issues + 谁在招人 thread comments (official API)
     │   └── boss.py        — Boss (subprocess → boss-cli)
     │
-    ├── filters.py / eval.py / notify.py / report.py — Blacklist filter, scoring eval, SMTP digest, report
+    ├── planner.py / filters.py / eval.py / notify.py / report.py — Weekly apply plan, blacklist filter, scoring eval, SMTP digest, report
     │
     ├── Data Layer (SQLite, WAL, 4 tables)
     │   ├── profiles · jobs · job_scores · applications
     │
-    └── web/ — Next.js 16 dashboard (Tailwind 4 + echarts), better-sqlite3
+    └── web/ — Next.js 16 dashboard (Tailwind 4 + echarts): board + funnel + advisor page, better-sqlite3
 ```
 
 ## Quick Start
@@ -108,6 +109,8 @@ jobpilot apply                         # 5. mark applied (human-in-the-loop)
 | `greeting <job_id> [-c boss\|xhs\|email]` | Channel-specific opening message for the HR (you send it) |
 | `advisor` | Strategy advisor — diagnoses your real funnel and gives this week's actions |
 | `ask "<question>"` | Job-search Q&A grounded in your situation + preferences |
+| `chat [--job <id>] [--new]` | Real-time multi-turn advisor with cross-session memory |
+| `plan [--target N]` | This week's apply list (deterministic) + follow-up reminders |
 | `import-xhs <json> [--score]` | Import Xiaohongshu favorites |
 | `apply` | Interactive batch apply |
 | `pipeline` | Funnel statistics |
@@ -186,7 +189,7 @@ JobPilot works without an API key:
 ## Tests
 
 ```bash
-python -m pytest tests/   # 391 tests
+python -m pytest tests/   # 428 tests
 ```
 
 ## License

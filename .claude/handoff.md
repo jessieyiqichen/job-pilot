@@ -109,6 +109,8 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 **cli.py 拆分（独立任务，本 session 一并 commit）**：cli.py 从 1270+ 行拆成 63 行壳 + src/jobpilot/commands/*（advisor_cmds/apply_kit/discover/pipeline_cmds/quality），register-at-bottom 模式避免循环导入。428 测试全过共存验证。注：此拆分非军师 Phase 工作，是之前挂的技术债卡被执行，改动出现在工作树后本 session 帮忙提交（独立 refactor commit）。
 
+**README 同步（Phase 24-29 收尾）**：之前的 session 只把 advisor/ask 加进 README，遗漏 chat/plan/Web 军师页。本次补齐：features 加"对话军师"（chat 多轮+记忆/advisor 诊断/plan 计划/ask 单问答）、架构图加 chat.py/planner.py + cli 拆分说明、命令表加 chat/plan 两行、Web dashboard 加 advisor page、测试 badge 391→428。
+
 **需求澄清**：用户原意不是几个独立命令，而是「像 Claude 这样能实时多轮聊、记得上文」的对话军师。之前的 ask 是一问一答无记忆，理解窄了。本 Phase 补上真·多轮对话。载体经询问选定 CLI（Web 实时聊天需后端+API key 上线+防滥用，暂缓）。
 
 **实现**：
