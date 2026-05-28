@@ -25,6 +25,7 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 13: 日报增强（新增高分岗位 digest 近N天 + 投递跟进提醒 + 修复 report profile_id=1 bug）（05-27，299 tests）
 - Phase 14: 邮件 digest + 本地 launchd 定时（notify.py SMTP + generate_digest + pipeline-all --email + digest 命令 + daily_run.sh + plist）（05-28，307 tests）
 - Phase 15: Web demo 部署 Vercel（脱敏快照 DB + API force-static/SSG + better-sqlite3 仅 build 期）→ LIVE: https://web-ten-omega-72.vercel.app （05-28）
+- Phase 16: 面试准备生成器（ai/interview.py：高分岗+简历→面试题+STAR要点，JSON 结构化，无 API 降级导出 prompt）+ jobpilot interview 命令 + refresh_demo.sh 一键刷新 demo（05-28，320 tests）
 
 ## 关键数据
 
@@ -37,8 +38,9 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 - [x] Phase 13: 日报增强（#1 新岗 digest + #2 跟进提醒）
 - [x] Phase 14: 定时跑（本地 launchd + 邮件 digest）— #1 调度部分。⚠️ 待用户：填 .env（SMTP 凭证）+ 给定时时间 → 我 launchctl load 并发一封测试邮件
-- [ ] Phase 15: 面试准备生成器（高分岗+简历 → 面试题+STAR 要点）— #3
-- [ ] Phase 16: 反馈驱动评分校准（投递/跳过决策 → 调偏好权重）— #4，过度工程风险，克制
+- [x] Phase 16: 面试准备生成器（高分岗+简历 → 面试题+STAR 要点）— #3 完成
+- [ ] Phase 17: 反馈驱动评分校准（投递/跳过决策 → 调偏好权重）— #4，过度工程风险，克制。建议先做轻量 eval（打分一致性度量）做底座
+- [ ] 待用户：定时器装上（填 .env SMTP + 给时间 → launchctl load + 测试邮件）
 
 ## Review 备注
 
@@ -148,6 +150,20 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - demo 数据冻结（本地 pipeline 不推送）；要更新 demo 需重新 cp+脱敏 web/demo-data/jobpilot.db 再 redeploy
 - 公开的是真实 349 岗位+AI 评分/建议（profiles 简历原文已脱敏）；用户已知情同意
 - 大脑（pipeline/打分/定制/定时/邮件/MCP）仍全部本地，Vercel 只托管看板 UI
+
+### 面试准备生成器 Phase 16（2026-05-28）
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/jobpilot/ai/interview.py` | 新建。InterviewPrep/InterviewQuestion（frozen）+ build_interview_prompt + parse_interview_response（JSON 容错）+ generate_interview_prep（API，无 key 抛 InterviewPrepError）+ format_markdown。诚实规则：talking_point 必须基于简历真实经历不许编造；可吃 JobScore 的 concerns 做针对性准备 |
+| `src/jobpilot/cli.py` | 新增 interview 命令：无 API key 导出 prompt（沿用 tailor 降级模式），有 key 生成+可 -o 存 md |
+| `scripts/refresh_demo.sh` | 一键刷新 demo 快照（脱敏），--deploy 顺带 vercel |
+| `tests/test_interview.py` + `tests/test_cli_interview.py` | +13 测试 |
+
+**测试**：307 → 320（+13），全过。真实端到端烟测：env 无 API key，走降级导出路径，真实 JD+简历正确注入 prompt（API 路径 mock 单测覆盖）。
+
+**注意**：当前 shell 的 ANTHROPIC_API_KEY 未设置（CLAUDE.md 说已充值，但需在 env/.env 配置才走 API 生成；否则导出 prompt 供 Claude.ai 手动用）。
 
 ### 新一轮XHS搜索（2026-05-06）
 

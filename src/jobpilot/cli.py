@@ -511,6 +511,61 @@ def _batch_tailor(
 
 
 @app.command()
+def interview(
+    job_id: str = typer.Argument(..., help="Job ID 或数字 id"),
+    profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
+    output: str = typer.Option("", "--output", "-o", help="保存到 Markdown 文件"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """为指定岗位生成面试准备（大概率问题 + 对标简历的 STAR 要点）。"""
+    _setup_logging(verbose)
+    from jobpilot.ai.interview import (
+        InterviewPrepError,
+        build_interview_prompt,
+        format_markdown,
+        generate_interview_prep,
+    )
+
+    db = _get_db()
+    profile = db.get_profile(profile_id)
+    if not profile:
+        console.print("[red]No profile found. Run 'jobpilot resume <file>' first.[/red]")
+        raise typer.Exit(1)
+
+    job = db.get_job(job_id)
+    if not job:
+        console.print(f"[red]Job not found: {job_id}[/red]")
+        raise typer.Exit(1)
+
+    score = db.get_score(job_id)
+
+    # No API key: export the prompt for a manual Claude.ai workflow.
+    if not config.ANTHROPIC_API_KEY:
+        prompt = build_interview_prompt(profile, job, score)
+        console.print("[yellow]未配置 API key，导出 prompt 供 Claude.ai 手动使用：[/yellow]\n")
+        if output:
+            Path(output).expanduser().write_text(prompt, encoding="utf-8")
+            console.print(f"[green]Prompt 已保存: {output}[/green]")
+        else:
+            console.print(prompt)
+        return
+
+    console.print(f"为 [bold]{job.title}[/bold] @ {job.company} 生成面试准备...")
+    try:
+        prep = generate_interview_prep(profile, job, score)
+    except InterviewPrepError as e:
+        console.print(f"[red]生成失败: {e}[/red]")
+        raise typer.Exit(1)
+
+    md = format_markdown(prep)
+    console.print()
+    console.print(md)
+    if output:
+        Path(output).expanduser().write_text(md, encoding="utf-8")
+        console.print(f"[green]已保存: {output}[/green]")
+
+
+@app.command()
 def apply(
     profile_id: int = typer.Option(10, "--profile", "-p", help="Profile ID"),
     min_score: float = typer.Option(7.0, "--min-score", "-m", help="Minimum score"),
