@@ -1,9 +1,12 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
+// Default to the bundled, sanitized demo snapshot so the dashboard builds and
+// deploys (e.g. on Vercel) without the local pipeline's DB. For live local data
+// set JOBPILOT_DB_PATH=../data/jobpilot.db.
 const DB_PATH =
   process.env.JOBPILOT_DB_PATH ??
-  path.join(process.cwd(), '..', 'data', 'jobpilot.db');
+  path.join(process.cwd(), 'demo-data', 'jobpilot.db');
 
 function openDb(): Database.Database {
   return new Database(DB_PATH, { readonly: true });
@@ -60,6 +63,16 @@ export function getJobsWithScores(): ReadonlyArray<JobRow> {
         ORDER BY s.overall_score DESC NULLS LAST`,
       )
       .all() as JobRow[];
+  } finally {
+    db.close();
+  }
+}
+
+export function getAllJobIds(): number[] {
+  const db = openDb();
+  try {
+    const rows = db.prepare('SELECT id FROM jobs ORDER BY id').all() as { id: number }[];
+    return rows.map((r) => r.id);
   } finally {
     db.close();
   }

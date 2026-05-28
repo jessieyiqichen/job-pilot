@@ -1,39 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getJobById } from '@/lib/db';
-import fs from 'fs';
-import path from 'path';
+import { getAllJobIds } from '@/lib/db';
 
-const TAILORED_DIR = path.join(process.cwd(), '..', 'data', 'tailored');
+// Static demo: tailored .docx files live on the local machine, not on the
+// deployed site, so downloads are unavailable here. Prerender false for all.
+export const dynamic = 'force-static';
 
-function buildFilename(company: string, title: string): string {
-  const safeCompany = company.replace(/\//g, '_').slice(0, 20);
-  const safeTitle = title.replace(/\//g, '_').slice(0, 30);
-  return `${safeCompany}_${safeTitle}.docx`;
+export function generateStaticParams() {
+  return getAllJobIds().map((id) => ({ id: String(id) }));
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const jobId = parseInt(id, 10);
-    if (isNaN(jobId)) {
-      return NextResponse.json({ error: 'Invalid job ID' }, { status: 400 });
-    }
-
-    const job = getJobById(jobId);
-    if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-    }
-
-    const filename = buildFilename(job.company, job.title);
-    const filePath = path.join(TAILORED_DIR, filename);
-    const exists = fs.existsSync(filePath);
-
-    return NextResponse.json({ exists, filename });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+export async function GET() {
+  return NextResponse.json({ exists: false, filename: '' });
 }

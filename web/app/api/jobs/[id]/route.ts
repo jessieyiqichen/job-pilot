@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getJobDetail, parseJsonArray, extractSourceUrl } from '@/lib/db';
+import { getJobDetail, getAllJobIds, parseJsonArray, extractSourceUrl } from '@/lib/db';
 import type { JobWithScore } from '@/types/job';
+
+// Prerender one static response per job at build — no runtime DB access.
+export const dynamic = 'force-static';
+
+export function generateStaticParams() {
+  return getAllJobIds().map((id) => ({ id: String(id) }));
+}
 
 export async function GET(
   _request: Request,

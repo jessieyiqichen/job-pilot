@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getPipelineCounts, getScoreDistribution, getSourceBreakdown } from '@/lib/db';
 import type { PipelineStats } from '@/types/job';
 
+// Prerender at build from the bundled snapshot — no runtime DB access.
+export const dynamic = 'force-static';
+
 const STAGE_ORDER = ['new', 'scored', 'tailored', 'applied', 'interview', 'offer', 'rejected'];
 
 const STAGE_LABELS: Record<string, string> = {

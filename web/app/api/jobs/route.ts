@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getJobsWithScores, parseJsonArray, extractSourceUrl } from '@/lib/db';
 import type { JobWithScore } from '@/types/job';
 
+// Prerender at build from the bundled snapshot — no runtime DB access.
+export const dynamic = 'force-static';
+
 export async function GET() {
   try {
     const rows = getJobsWithScores();
