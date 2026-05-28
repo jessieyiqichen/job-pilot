@@ -129,10 +129,63 @@ def _extract_json(text: str) -> dict:
     return {}
 
 
+def _salvage_questions(text: str) -> list[dict]:
+    """Recover complete question objects from truncated JSON (brace-matched).
+
+    The model can hit max_tokens mid-array; this salvages every fully-formed
+    object inside "questions": [ ... ] and drops the incomplete tail.
+    """
+    idx = text.find('"questions"')
+    if idx == -1:
+        return []
+    start = text.find("[", idx)
+    if start == -1:
+        return []
+
+    objs: list[dict] = []
+    depth = 0
+    obj_start: int | None = None
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                obj_start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and obj_start is not None:
+                try:
+                    objs.append(json.loads(text[obj_start : i + 1]))
+                except json.JSONDecodeError:
+                    pass
+                obj_start = None
+        elif ch == "]" and depth == 0:
+            break
+    return objs
+
+
 def parse_interview_response(text: str, job: Job) -> InterviewPrep:
-    """Parse the model's JSON into an InterviewPrep (pure, testable)."""
+    """Parse the model's JSON into an InterviewPrep (pure, testable).
+
+    Tolerant of truncated responses: if the JSON won't parse whole, salvages
+    whatever complete question objects exist.
+    """
     data = _extract_json(text)
     raw_questions = data.get("questions", []) if isinstance(data, dict) else []
+    if not raw_questions:
+        raw_questions = _salvage_questions(text)
     questions: list[InterviewQuestion] = []
     for q in raw_questions:
         if not isinstance(q, dict):
@@ -170,8 +223,10 @@ def format_markdown(prep: InterviewPrep) -> str:
                 lines.append(f"- 要点：{q.talking_point}")
             lines.append("")
     if prep.prep_notes:
-        lines.append("## 总体准备建议")
-        lines.append(prep.prep_notes)
+        notes = prep.prep_notes.lstrip()
+        if not notes.startswith("#"):  # avoid double heading if model added its own
+            lines.append("## 总体准备建议")
+        lines.append(notes)
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -198,7 +253,7 @@ def generate_interview_prep(
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         message = client.messages.create(
             model=config.ANTHROPIC_MODEL,
-            max_tokens=4096,
+            max_tokens=8192,  # 8-10 Chinese Q + talking points overflow 4096
             messages=[{"role": "user", "content": prompt}],
         )
     except Exception as exc:  # noqa: BLE001 - surface as domain error

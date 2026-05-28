@@ -93,6 +93,21 @@ def test_parse_garbage_returns_empty():
     assert prep.prep_notes == ""
 
 
+def test_parse_salvages_truncated_json():
+    """Model hit max_tokens mid-array: recover the complete questions, drop the tail."""
+    truncated = """```json
+{
+  "questions": [
+    {"category": "行为面", "question": "讲个项目", "talking_point": "用数据分析项目，结果提升了X"},
+    {"category": "产品sense", "question": "如何定义指标", "talking_point": "我会先看北极星"},
+    {"category": "技术理解", "question": "解释一下你对大模型的理"""
+    prep = parse_interview_response(truncated, _job())
+    # two complete objects recovered, the truncated third dropped
+    assert len(prep.questions) == 2
+    assert prep.questions[0].question == "讲个项目"
+    assert prep.questions[1].category == "产品sense"
+
+
 # ----------------------------------------------------------------------
 # generate_interview_prep
 # ----------------------------------------------------------------------
