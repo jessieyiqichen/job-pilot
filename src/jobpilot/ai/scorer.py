@@ -175,11 +175,20 @@ def score_jobs(profile: Profile, jobs: list[Job], *, force_heuristic: bool = Fal
     Returns:
         List of JobScores sorted by overall_score descending
     """
+    from jobpilot.filters import apply_company_filters
+
+    prefs = _load_preferences()
+    blacklist = prefs.get("blacklist_companies", []) or []
+    filter_hh = prefs.get("filter_headhunter", True)
+
     scores = []
     for i, job in enumerate(jobs, 1):
         logger.info("Scoring job %d/%d: %s @ %s", i, len(jobs), job.title, job.company)
         try:
             score = score_job(profile, job, force_heuristic=force_heuristic)
+            score = apply_company_filters(
+                score, job, blacklist, filter_headhunter=filter_hh
+            )
             scores.append(score)
         except Exception as e:
             logger.error("Failed to score job %s: %s", job.job_id, e)
