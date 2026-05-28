@@ -26,6 +26,8 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 - Phase 14: 邮件 digest + 本地 launchd 定时（notify.py SMTP + generate_digest + pipeline-all --email + digest 命令 + daily_run.sh + plist）（05-28，307 tests）
 - Phase 15: Web demo 部署 Vercel（脱敏快照 DB + API force-static/SSG + better-sqlite3 仅 build 期）→ LIVE: https://web-ten-omega-72.vercel.app （05-28）
 - Phase 16: 面试准备生成器（ai/interview.py：高分岗+简历→面试题+STAR要点，JSON 结构化，无 API 降级导出 prompt）+ jobpilot interview 命令 + refresh_demo.sh 一键刷新 demo（05-28，320 tests）
+- Phase 17: #4 eval 一致性度量（eval.py）+ label 交互式标注（333 tests，校准待真实标签）（05-28）
+- Phase 18: README 整体重写 + GitHub topics/badge + demo 增强（详情页烤入定制简历/面试准备样例 + /how-it-works 页）→ redeploy https://web-ten-omega-72.vercel.app （05-28）
 
 ## 关键数据
 
