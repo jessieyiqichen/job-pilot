@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobPilot · 设计与 Eval 思路</title>
+<style>
+  :root{
+    --bg:#f6f8fc; --card:#ffffff; --ink:#1e293b; --ink-soft:#475569; --ink-faint:#64748b;
+    --line:#e2e8f0; --accent:#4f46e5; --accent-soft:#eef2ff; --accent-ink:#4338ca;
+    --green:#059669; --green-soft:#ecfdf5; --amber:#b45309; --amber-soft:#fffbeb;
+    --rose:#e11d48; --rose-soft:#fff1f2; --code:#be185d;
+    --shadow:0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",Segoe UI,sans-serif;
+    line-height:1.72; font-size:15px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:0 22px}
+  code{font-family:"SF Mono",Menlo,Consolas,monospace; font-size:.86em; background:#f1f5f9; color:var(--code); padding:1px 6px; border-radius:5px}
+
+  /* nav */
+  nav{position:sticky; top:0; z-index:20; background:rgba(246,248,252,.86); backdrop-filter:blur(10px); border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex; align-items:center; gap:18px; height:54px}
+  nav .brand{font-weight:700; color:var(--accent-ink); letter-spacing:.2px}
+  nav a{color:var(--ink-soft); text-decoration:none; font-size:13.5px; font-weight:500}
+  nav a:hover{color:var(--accent)}
+  nav .spacer{flex:1}
+  @media(max-width:680px){nav a.hide-sm{display:none}}
+
+  /* hero */
+  header.hero{padding:54px 0 30px; border-bottom:1px solid var(--line)}
+  .tag{display:inline-block; background:var(--accent-soft); color:var(--accent-ink); font-size:12.5px; font-weight:600; padding:5px 12px; border-radius:999px; margin-bottom:18px}
+  h1{font-size:34px; line-height:1.25; margin:0 0 14px; letter-spacing:-.5px}
+  .lede{font-size:17px; color:var(--ink-soft); max-width:760px; margin:0}
+  .lede b{color:var(--ink)}
+  .stats{display:flex; gap:30px; flex-wrap:wrap; margin-top:26px}
+  .stat .n{font-size:24px; font-weight:700; color:var(--accent-ink)}
+  .stat .l{font-size:12.5px; color:var(--ink-faint)}
+
+  section{padding:42px 0; border-bottom:1px solid var(--line)}
+  h2{font-size:23px; margin:0 0 6px; letter-spacing:-.3px}
+  .sub{color:var(--ink-faint); font-size:14px; margin:0 0 26px}
+
+  /* flow diagram */
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px; box-shadow:var(--shadow)}
+  .flow .col{flex:1; min-width:150px; text-align:center; padding:6px 8px; position:relative}
+  .flow .col:not(:last-child)::after{content:"→"; position:absolute; right:-9px; top:34px; color:#cbd5e1; font-size:20px}
+  .flow .icn{font-size:13px; font-weight:700; color:var(--accent-ink); margin-bottom:8px}
+  .flow .box{background:var(--accent-soft); border:1px solid #dfe3ff; border-radius:10px; padding:10px 6px; font-size:13px; color:var(--ink); margin-bottom:6px}
+  .flow .note{font-size:11.5px; color:var(--ink-faint)}
+  .flow-foot{margin-top:14px; font-size:13px; color:var(--ink-soft); background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:12px 16px}
+  .flow-foot b{color:var(--accent-ink)}
+
+  /* cards */
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:16px}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 20px 18px; box-shadow:var(--shadow)}
+  .card .k{font-size:12px; font-weight:700; color:var(--accent); letter-spacing:.4px; text-transform:uppercase}
+  .card h3{font-size:17px; margin:7px 0 9px}
+  .card p{margin:0 0 10px; color:var(--ink-soft); font-size:14px}
+  .card .say{background:var(--accent-soft); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:9px 13px; font-size:13.5px; color:var(--accent-ink)}
+  .card .say b{color:var(--accent-ink)}
+  .full{grid-column:1/-1}
+
+  /* degradation buckets */
+  .buckets{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  @media(max-width:680px){.buckets{grid-template-columns:1fr}}
+  .bucket{border-radius:14px; padding:16px 16px 14px; border:1px solid var(--line); background:var(--card); box-shadow:var(--shadow)}
+  .bucket h4{margin:0 0 4px; font-size:15px}
+  .bucket .meta{font-size:12px; color:var(--ink-faint); margin-bottom:10px}
+  .bucket ul{margin:0; padding-left:18px; font-size:13px; color:var(--ink-soft)}
+  .bucket li{margin:3px 0}
+  .b-code{border-top:4px solid #94a3b8}
+  .b-enh{border-top:4px solid var(--green)}
+  .b-ess{border-top:4px solid var(--accent)}
+  .pill{display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px}
+  .pill.code{background:#f1f5f9; color:#475569}
+  .pill.enh{background:var(--green-soft); color:var(--green)}
+  .pill.ess{background:var(--accent-soft); color:var(--accent-ink)}
+
+  /* eval */
+  .eval-lead{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; box-shadow:var(--shadow); margin-bottom:22px}
+  .eval-lead .q{font-size:16px; font-weight:600; margin:0 0 6px}
+  .eval-lead .a{margin:0; color:var(--ink-soft); font-size:14.5px}
+  .eval-cols{display:grid; grid-template-columns:1.05fr .95fr; gap:20px; align-items:start}
+  @media(max-width:760px){.eval-cols{grid-template-columns:1fr}}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; box-shadow:var(--shadow)}
+  .panel h3{margin:0 0 12px; font-size:16px}
+  .step{display:flex; gap:11px; margin:11px 0}
+  .step .num{flex:none; width:24px; height:24px; border-radius:50%; background:var(--accent); color:#fff; font-size:12.5px; font-weight:700; display:flex; align-items:center; justify-content:center}
+  .step .t{font-size:13.5px; color:var(--ink-soft)}
+  .step .t b{color:var(--ink)}
+
+  /* confusion matrix */
+  .cm{display:grid; grid-template-columns:auto 1fr 1fr; grid-template-rows:auto 1fr 1fr; gap:6px; margin:6px 0 4px}
+  .cm .lab{font-size:11px; color:var(--ink-faint); display:flex; align-items:center; justify-content:center; text-align:center; font-weight:600}
+  .cm .cell{border-radius:10px; padding:12px 8px; text-align:center}
+  .cm .cell .nm{font-size:11px; font-weight:700; letter-spacing:.3px}
+  .cm .cell .de{font-size:11px; color:var(--ink-faint); margin-top:2px}
+  .cm .tp{background:var(--green-soft); color:var(--green); border:1px solid #bbf7d0}
+  .cm .tn{background:var(--green-soft); color:var(--green); border:1px solid #bbf7d0}
+  .cm .fp{background:var(--rose-soft); color:var(--rose); border:1px solid #fecdd3}
+  .cm .fn{background:var(--amber-soft); color:var(--amber); border:1px solid #fde68a}
+  .axis-x{grid-column:2/4; text-align:center; font-size:11.5px; color:var(--ink-faint); font-weight:600; margin-bottom:2px}
+
+  .formulas{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+  .fx{background:#f8fafc; border:1px solid var(--line); border-radius:9px; padding:7px 11px; font-size:12.5px; color:var(--ink-soft); font-family:"SF Mono",Menlo,monospace}
+  .fx b{color:var(--accent-ink)}
+
+  .gt{margin-top:6px}
+  .gt .row{display:flex; gap:10px; align-items:center; font-size:13px; padding:7px 0; border-bottom:1px solid var(--line)}
+  .gt .row:last-child{border-bottom:none}
+  .gt .badge{flex:none; font-size:11px; font-weight:700; padding:2px 9px; border-radius:6px}
+  .gt .pos{background:var(--green-soft); color:var(--green)}
+  .gt .neg{background:var(--rose-soft); color:var(--rose)}
+  .gt .ov{background:var(--accent-soft); color:var(--accent-ink)}
+  .gt .row span{color:var(--ink-soft)}
+
+  .honest{margin-top:22px; background:var(--amber-soft); border:1px solid #fde68a; border-left:4px solid var(--amber); border-radius:0 12px 12px 0; padding:16px 20px}
+  .honest h3{margin:0 0 6px; font-size:15px; color:var(--amber)}
+  .honest p{margin:0; font-size:14px; color:#78350f}
+  .honest p b{color:#78350f}
+
+  .why{margin-top:18px; background:var(--accent-soft); border-radius:12px; padding:14px 18px; font-size:14px; color:var(--accent-ink)}
+  .why b{color:var(--accent-ink)}
+
+  /* competitive comparison */
+  .cmp{width:100%; border-collapse:separate; border-spacing:0; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:var(--shadow); font-size:13.5px; margin-top:4px}
+  .cmp th,.cmp td{padding:12px 14px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line)}
+  .cmp thead th{background:#f8fafc; font-size:11.5px; color:var(--ink-faint); font-weight:700; letter-spacing:.3px; text-transform:uppercase}
+  .cmp tbody tr:last-child td{border-bottom:none}
+  .cmp td.me{color:var(--accent-ink); background:var(--accent-soft)}
+  .cmp td.me b{color:var(--accent-ink)}
+  .cmp .who{font-weight:600; color:var(--ink)}
+  @media(max-width:680px){.cmp{font-size:12.5px} .cmp th,.cmp td{padding:9px 10px}}
+
+  footer{padding:30px 0 50px; color:var(--ink-faint); font-size:13px}
+  footer b{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span class="brand">JobPilot</span>
+  <span class="spacer"></span>
+  <a href="#product">产品思考</a>
+  <a href="#arch">架构</a>
+  <a href="#design">设计判断</a>
+  <a href="#router">Router 思想</a>
+  <a href="#degrade" class="hide-sm">AI 降级</a>
+  <a href="#eval">Eval 思路</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="tag">AI 求职助手 · 从 0 到 1 独立搭建</span>
+  <h1>用 LLM 做求职链路，<br>但把不可逆的动作留给人。</h1>
+  <p class="lede">JobPilot 把「找岗 → 评估匹配 → 改简历 → 追踪」用 LLM 串成一条链，<b>投递留人工</b>。
+  它不是一个「全自主 agent」——流程编排写死在代码里，<b>Claude 只在需要判断的点当一个结构化推理函数</b>。
+  求职高风险、不可逆、还用真实账号，我要的是可控和可解释。</p>
+  <div class="stats">
+    <div class="stat"><div class="n">495</div><div class="l">测试全通过</div></div>
+    <div class="stat"><div class="n">30</div><div class="l">CLI 命令</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">爬虫 · 0 自动投递</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">数据源（adapter 隔离）</div></div>
+  </div>
+</div></header>
+
+<!-- 产品思考 -->
+<section id="product"><div class="wrap">
+  <h2>产品思考：为什么做、给谁、跟谁比</h2>
+  <p class="sub">先想清楚问题和定位，再写第一行代码。</p>
+
+  <div class="card full" style="margin-bottom:18px">
+    <div class="k">问题 & 用户</div>
+    <h3>痛点在「准备」，不在「投递」</h3>
+    <p>主动求职的人（尤其多渠道海投的留学生、转行者），真正耗时间的是把岗位散在 Boss、小红书、各种网站上逐个看 JD、判断匹不匹配、再逐份改简历——重复、累、还容易漏。但全自动投递又不可信、有风险：投错不可逆，用的还是你真实账号。</p>
+    <div class="say"><b>所以我的判断：把「找 + 判断 + 改」自动化，把「投不投」留给人。</b>价值在准备，风险点留人工。</div>
+  </div>
+
+  <table class="cmp">
+    <thead><tr><th>同类做法</th><th>代表</th><th>他们怎么做</th><th>JobPilot 的不同</th></tr></thead>
+    <tbody>
+      <tr><td class="who">平台自带 AI</td><td>Boss / 猎聘「AI 找工作」</td><td>绑单一平台，黑箱推荐，看不到为什么推这个</td><td class="me"><b>多渠道聚合</b>，打分给可解释理由，不绑平台</td></tr>
+      <tr><td class="who">AI 简历工具</td><td>各类简历优化器</td><td>只改简历，容易加上你没有的技能（注水）</td><td class="me"><b>patch 不重写</b> + 技能白名单，不造假、不动格式</td></tr>
+      <tr><td class="who">通用 agent 框架搭的</td><td>LangChain / AutoGPT 式</td><td>全自主、让模型自己决定下一步，易跑偏、不可控</td><td class="me"><b>半自主</b>，控制流写死，不自动投递</td></tr>
+      <tr><td class="who">AI 招聘方</td><td>OpenJobs / Mira 这类</td><td>招聘方视角，帮 HR 找候选人</td><td class="me">同一领域的<b>求职方镜像</b>，帮候选人，逻辑同构</td></tr>
+    </tbody>
+  </table>
+
+  <div class="why" style="margin-top:18px"><b>一句话定位：</b>市面上要么绑平台、要么全自动黑箱、要么只改简历。JobPilot = 多渠道聚合 + 可解释打分 + 人做最后决定 + 不造假不爬虫（合规）。差异不在「更智能」，在<b>高风险场景里更可控、更可信</b>。</div>
+
+  <div class="honest" style="margin-top:18px">
+    <h3>关于市场，我会诚实说</h3>
+    <p>我没有精确的市场份额数据，上面是<b>定性的定位对比</b>，不是市场规模测算。求职工具是个拥挤赛道，我做的不是「再造一个更大的」，而是验证一个具体判断：<b>多渠道 + 人在最后一环</b>这种形态，对真实求职者是不是更靠谱。</p>
+  </div>
+</div></section>
+
+<!-- 架构 -->
+<section id="arch"><div class="wrap">
+  <h2>一条主数据流，串起整个链路</h2>
+  <p class="sub">没有一上来堆功能；先定主数据流，再让每一步失败彼此隔离——一个死掉的渠道不会拖垮全程。</p>
+  <div class="flow">
+    <div class="col"><div class="icn">解析</div><div class="box">简历 → 结构化画像</div><div class="note">PDF/DOCX · AI 提取</div></div>
+    <div class="col"><div class="icn">发现</div><div class="box">多渠道搜岗</div><div class="note">web · 小红书 · adapter</div></div>
+    <div class="col"><div class="icn">判断</div><div class="box">AI 匹配打分 1–10</div><div class="note">能力 + 偏好维度</div></div>
+    <div class="col"><div class="icn">定制</div><div class="box">只对高分岗改简历</div><div class="note">patch 原 docx</div></div>
+    <div class="col"><div class="icn">陪伴</div><div class="box">追踪 + 军师诊断</div><div class="note">漏斗 · 策略建议</div></div>
+  </div>
+  <div class="flow-foot"><b>关键：</b>打分、定制、军师建议这几个「需要判断」的点才调 LLM；搜岗顺序、要不要投递、漏斗统计这些「流程控制」全是代码写死的。<b>LLM 是点缀，不是地基。</b></div>
+</div></section>
+
+<!-- 设计判断 -->
+<section id="design"><div class="wrap">
+  <h2>五个关键设计判断</h2>
+  <p class="sub">每一条都能扛住「你凭什么这么做」的追问。</p>
+  <div class="grid">
+
+    <div class="card">
+      <div class="k">Agent 架构</div>
+      <h3>半自主，不是全自主</h3>
+      <p>全自主 agent 把控制流交给模型自己决定下一步、何时停（ReAct 那类）。强，但会跑偏、不可控、不可解释。我把控制流用代码写死，LLM 只在打分/写话术这种点被调用。</p>
+      <div class="say"><b>能用代码写死的控制流，就别交给模型。</b>不确定性只留给真正需要判断力的点。</div>
+    </div>
+
+    <div class="card">
+      <div class="k">可靠性</div>
+      <h3>AI 可选降级</h3>
+      <p>没有 API key 也能跑：打分降级到启发式加权规则，搜岗、追踪、漏斗这些核心功能照常用。LLM 是增强项，不是地基。</p>
+      <div class="say">做这个降级最大的收获不是容错，是<b>逼我想清楚——哪些功能离了 LLM 根本不成立。</b></div>
+    </div>
+
+    <div class="card">
+      <div class="k">LLM 可控性</div>
+      <h3>简历定制：patch 不重写</h3>
+      <p>AI 直接生成整份简历会改乱格式、还会加我没有的技能。所以我让它<b>只产出改好的文字</b>，再用文本对齐（difflib）patch 回原 <code>.docx</code>，字体排版分毫不动；技能走人工白名单。</p>
+      <div class="say"><b>默认 AI 输出不可信</b>，在「它会乱来」的前提下设计系统。</div>
+    </div>
+
+    <div class="card">
+      <div class="k">可信建议</div>
+      <h3>军师：算账与说话分离</h3>
+      <p><code>diagnose()</code> 纯代码算诊断——漏斗、高分岗缺口、停滞数，<b>每个数字都追溯回一条数据库查询</b>、可测试、不调 LLM。<code>generate_advice()</code> 才把这些数字喂给 Claude 翻成人话。</p>
+      <div class="say"><b>算账归代码、说话归模型，LLM 碰不到事实只碰措辞。</b>建议才扛得住「你凭什么这么说」。</div>
+    </div>
+
+    <div class="card full">
+      <div class="k">工程基础</div>
+      <h3>选型匹配规模，不是越重越好</h3>
+      <p><b>adapter 模式</b>隔离平台差异——每个渠道返回格式都不同，上层只认统一接口，加渠道就是新写一个 adapter。<b>SQLite（WAL + connection-per-call）</b>：单用户本地工具，没有并发写、不需要网络访问，一个文件零运维——多用户在线了才该换 Postgres。<b>frozen dataclass</b>：数据建好就不可改，要改生成新副本，确定没有函数在暗处偷偷改了岗位数据。</p>
+      <div class="say">先写测试再实现——现在 <b>495 个测试全过</b>。单元测试 mock 掉 AI 只验我的逻辑；模型质量另走 eval（见下）。</div>
+    </div>
+
+  </div>
+</div></section>
+
+<!-- ROUTER 思想 -->
+<section id="router"><div class="wrap">
+  <h2>两段式打分：用便宜方式跑大多数岗位，只在关键点花钱</h2>
+  <p class="sub">这是 JobPilot 一个我反复思考过的设计决策——本质上是用最简单的方式做模型路由。</p>
+
+  <div class="eval-lead">
+    <p class="q">问题：用 LLM 给所有岗位精细打分要花多少钱？</p>
+    <p class="a">用 Claude 给一批岗位（约 350 个）按 5 维度精细打分，单次成本约 7 美金。每周跑 3-5 次完整 pipeline，一周就要 100 美金，两个月烧光预算——产品根本跑不到验证想法那天。</p>
+  </div>
+
+  <div class="grid" style="margin-top:18px">
+    <div class="card full">
+      <div class="k">解法</div>
+      <h3>把"打分"这件事拆成两段</h3>
+      <p>第一段（规则筛）：所有岗位过一遍——关键词匹配、薪资硬过滤、学历过滤、地点过滤。免费、毫秒级、覆盖全部。出来一个粗排序，把明显不匹配的剔除。</p>
+      <p>第二段（LLM 精评）：只对 Top 20 调 Claude API 做 5 维度精细打分（技能、经验、学历、岗位相关度、偏好）。这是真正花钱的部分，但只在最有可能投的少数岗位上花。</p>
+      <div class="say">简单任务用便宜方式，复杂任务用贵方式——这是路由的本质。我没用 ML 模型做选择，规则启发式已经够用。</div>
+    </div>
+  </div>
+
+</div></section>
+
+<!-- AI 降级三桶 -->
+<section id="degrade"><div class="wrap">
+  <h2>「AI 可选降级」到底降的是什么？</h2>
+  <p class="sub">把功能按对 LLM 的依赖分三桶，比笼统说「能降级」更扛追问。</p>
+  <div class="buckets">
+    <div class="bucket b-code">
+      <h4>纯代码 <span class="pill code">不碰 LLM</span></h4>
+      <div class="meta">无 API key 照常跑</div>
+      <ul>
+        <li>投递追踪 / 漏斗 / 日报</li>
+        <li>军师 <code>diagnose()</code> 诊断</li>
+        <li>跟进提醒 · 状态机</li>
+        <li>difflib patch + 白名单机制</li>
+      </ul>
+    </div>
+    <div class="bucket b-enh">
+      <h4>能降级 <span class="pill enh">enhanced</span></h4>
+      <div class="meta">退到确定性版本，核心还在</div>
+      <ul>
+        <li>AI 打分 → 启发式加权</li>
+        <li>军师建议措辞 → 退回数字诊断</li>
+      </ul>
+      <p style="font-size:12.5px;color:var(--ink-faint);margin:10px 0 0">替代品本身诚实有用（规则排序真能排序）。</p>
+    </div>
+    <div class="bucket b-ess">
+      <h4>不该降级 <span class="pill ess">essential</span></h4>
+      <div class="meta">价值就在语义理解</div>
+      <ul>
+        <li>简历语义重组</li>
+        <li>多轮对话军师 / 面经识别</li>
+        <li>简历结构化解析</li>
+      </ul>
+      <p style="font-size:12.5px;color:var(--ink-faint);margin:10px 0 0">没 key 时<b>诚实退回</b>（导出 prompt），不用模板假装。</p>
+    </div>
+  </div>
+  <div class="why"><b>降级的底线：绝不用低质量替代品冒充高质量功能。</b>能降级的（打分）替代品本身有用；不能降级的，我退回到确定性事实，宁可少给，不给假的——这跟军师「数据不足拒绝硬编」是同一个判断。</div>
+</div></section>
+
+<!-- Eval -->
+<section id="eval"><div class="wrap">
+  <h2>Eval 思路：怎么知道 AI 打分不是瞎打？</h2>
+  <p class="sub">先度量，再调权重——你没法在没测之前就去调权重对不对。</p>
+
+  <div class="eval-lead">
+    <p class="q">问题：AI 给岗位打的 1–10 分，到底跟「我真正想投哪个」吻合多少？</p>
+    <p class="a">把它当成一个<b>二分类问题</b>：预测 = 「AI 分 ≥ 阈值」，真值 = 「我会不会投这个岗」。两边一比，就能算出一致性，而不是靠感觉说「AI 挺准的」。</p>
+  </div>
+
+  <div class="eval-cols">
+
+    <div class="panel">
+      <h3>方法：四步</h3>
+      <div class="step"><div class="num">1</div><div class="t"><b>定义真值（ground truth）</b>——我真实的投/不投决定，从两个来源合并（见下表）。</div></div>
+      <div class="step"><div class="num">2</div><div class="t"><b>定义预测</b>——AI 给该岗的 <code>overall_score ≥ threshold</code> 即「预测会投」。这一版 threshold = 7.0。</div></div>
+      <div class="step"><div class="num">3</div><div class="t"><b>只统计「既有标签、又有 AI 分」的岗</b>，逐个落进混淆矩阵 TP/FP/FN/TN。</div></div>
+      <div class="step"><div class="num">4</div><div class="t"><b>算 precision / recall / F1 / accuracy</b>，再据此决定要不要调打分权重。</div></div>
+
+      <h3 style="margin-top:18px">真值从哪来</h3>
+      <div class="gt">
+        <div class="row"><span class="badge pos">= 1</span><span>投了 / 有回复 / 进面试 / 拿 offer → 我想要这个岗</span></div>
+        <div class="row"><span class="badge neg">= 0</span><span>被拒（我投了但没成）→ 计为负例</span></div>
+        <div class="row"><span class="badge ov">覆盖</span><span>手动标注文件 <code>eval_labels.json</code> 优先级最高，覆盖上面两条</span></div>
+      </div>
+      <p style="font-size:12.5px;color:var(--ink-faint);margin:14px 0 0">
+        这一轮主要靠 <b>手动标注</b>——因为我真实投递发生在 JobPilot 之外（Boss / 邮箱直投），<code>applied</code> 字段在 DB 里基本空着。所以我从 372 个有 AI 分的岗位里随机抽 80 个，自己一个一个标「想投 / 不想投」。
+      </p>
+    </div>
+
+    <div class="panel">
+      <h3>混淆矩阵（实际数字）</h3>
+      <div class="axis-x">真值：我会不会投</div>
+      <div class="cm">
+        <div class="lab"></div>
+        <div class="lab">会投 (1)</div>
+        <div class="lab">不投 (0)</div>
+
+        <div class="lab" style="writing-mode:vertical-rl">AI&nbsp;≥&nbsp;7.0</div>
+        <div class="cell tp"><div class="nm" style="font-size:18px">TP = 21</div><div class="de">打高分·我也想投</div></div>
+        <div class="cell fp"><div class="nm" style="font-size:18px">FP = 6</div><div class="de">打高分·我不投</div></div>
+
+        <div class="lab" style="writing-mode:vertical-rl">AI&nbsp;&lt;&nbsp;7.0</div>
+        <div class="cell fn"><div class="nm" style="font-size:18px">FN = 18</div><div class="de">打低分·我却想投</div></div>
+        <div class="cell tn"><div class="nm" style="font-size:18px">TN = 35</div><div class="de">打低分·我也不投</div></div>
+      </div>
+      <div class="formulas">
+        <span class="fx"><b>P</b> = 21/(21+6) = <b>0.778</b></span>
+        <span class="fx"><b>R</b> = 21/(21+18) = <b>0.538</b></span>
+        <span class="fx"><b>F1</b> = <b>0.636</b></span>
+        <span class="fx"><b>Acc</b> = 56/80 = <b>0.700</b></span>
+      </div>
+      <p style="font-size:12.5px;color:var(--ink-faint);margin:12px 0 0">
+        对求职这件事，<b>FN（把我想投的岗打了低分）比 FP 更危险</b>——漏掉机会的代价更高。所以我会更看 recall，而不是只看 accuracy。
+      </p>
+    </div>
+
+  </div>
+
+  <!-- 实际跑出来的结果 dashboard -->
+  <div style="margin-top:22px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; box-shadow:var(--shadow)">
+    <h3 style="margin:0 0 4px; font-size:16px">实际跑出来的指标（N = 80 个标注 + 有 AI 分的岗位）</h3>
+    <p class="sub" style="margin:0 0 18px">命令：<code>evaluate(db, labels, threshold=7.0)</code>，<code>src/jobpilot/eval.py</code> 154 行，纯 Python，无外部依赖。</p>
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px">
+      <div style="background:var(--accent-soft); border:1px solid #dfe3ff; border-radius:12px; padding:14px; text-align:center">
+        <div style="font-size:26px; font-weight:700; color:var(--accent-ink)">0.778</div>
+        <div style="font-size:12px; color:var(--ink-faint); margin-top:4px">Precision · 准</div>
+      </div>
+      <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:14px; text-align:center">
+        <div style="font-size:26px; font-weight:700; color:#c2410c">0.538</div>
+        <div style="font-size:12px; color:var(--ink-faint); margin-top:4px">Recall · 全</div>
+      </div>
+      <div style="background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; text-align:center">
+        <div style="font-size:26px; font-weight:700; color:var(--ink)">0.636</div>
+        <div style="font-size:12px; color:var(--ink-faint); margin-top:4px">F1 · 综合</div>
+      </div>
+      <div style="background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; text-align:center">
+        <div style="font-size:26px; font-weight:700; color:var(--ink)">0.700</div>
+        <div style="font-size:12px; color:var(--ink-faint); margin-top:4px">Accuracy · 一致率</div>
+      </div>
+    </div>
+    <p style="margin:16px 0 0; font-size:13.5px; color:var(--ink-soft)">
+      <b style="color:var(--accent-ink)">解读：</b>AI 打高分的岗里 <b>78% 是我真想投的</b>（Precision 还行）。但**我想投的岗里，AI 只抓到了 54%——46% 被漏掉了**（Recall 明显偏低）。这是 eval 跑出来才能看到的真相，光看 AI 输出的高分列表不会发现。
+    </p>
+  </div>
+
+  <!-- 关键发现：18 个 FN -->
+  <div style="margin-top:22px; background:#fff7ed; border:1px solid #fed7aa; border-left:4px solid #c2410c; border-radius:0 14px 14px 0; padding:20px 22px">
+    <h3 style="margin:0 0 10px; font-size:16px; color:#9a3412">关键发现：18 个 FN（AI 漏抓的好岗）有共同模式</h3>
+    <p style="margin:0 0 12px; color:#7c2d12; font-size:14px">
+      我去逐个看 FN——AI 打了 5–6 分但我标了「想投」的岗位——发现一个清晰的 pattern：<b>这些岗几乎全是大厂或一线 AI 创业团队的相关岗</b>，但 AI 给它们打了低分。
+    </p>
+    <div style="background:#fff; border-radius:10px; padding:14px 16px; font-size:13.5px; color:#78350f; line-height:1.85">
+      <b>典型 FN 案例</b>：<br>
+      · 字节跳动 AI 产品经理实习生 · <b>AI 分 6.19</b> · 我想投<br>
+      · 阿里云千问 APP 主 Chat 组 · <b>5.89</b> · Kimi 同类对口<br>
+      · MiniMax AI Agent 产品岗 · <b>5.50</b> · 标题明显对口<br>
+      · 上海人工智能实验室 AI 产品经理 · <b>6.94</b> · 研究院背景<br>
+      · 智谱华章 产品经理（北京）· <b>6.16</b> · 大模型独角兽<br>
+      · 自然选择 大模型应用产品 · <b>5.64</b> · 创业明星
+    </div>
+    <p style="margin:14px 0 0; color:#7c2d12; font-size:14px">
+      <b>根因诊断：</b>AI 当前打分权重<b>过度依赖标题精准度</b>（「AI 产品经理实习生」这种关键词）——<b>忽略了公司质量信号</b>。大厂的相关岗即使标题模糊也应该被推荐，但当前模型给不了高分。
+    </p>
+  </div>
+
+  <!-- 下一步 -->
+  <div style="margin-top:22px; background:var(--accent-soft); border:1px solid #dfe3ff; border-radius:14px; padding:20px 22px">
+    <h3 style="margin:0 0 12px; font-size:16px; color:var(--accent-ink)">下一步：加 company_tier 权重，重测对比</h3>
+    <div style="display:grid; grid-template-columns:auto 1fr; gap:10px 16px; font-size:13.5px; color:var(--ink-soft); margin-bottom:10px">
+      <div style="font-weight:600; color:var(--accent-ink)">改动</div>
+      <div>在打分 prompt 里加 <code>company_tier</code> 一档：独角兽/大厂/知名 AI 创业团队 → +1 分；信息不全/不知名小公司 → −0.5 分。</div>
+      <div style="font-weight:600; color:var(--accent-ink)">成本</div>
+      <div>~1 小时 prompt 改 + 重跑 eval。这是低成本高回报实验。</div>
+      <div style="font-weight:600; color:var(--accent-ink)">目标</div>
+      <div>Recall 从 <b>0.538</b> 提到 <b>≥ 0.75</b>，同时 Precision 不能掉到 <b>0.65</b> 以下（避免过度推大厂）。</div>
+      <div style="font-weight:600; color:var(--accent-ink)">退出条件</div>
+      <div>如果 Recall 上去但 Precision 崩了（FP 大量增加），说明 company_tier 权重太大，需要回退或细分。</div>
+    </div>
+    <p style="margin:6px 0 0; font-size:13.5px; color:var(--accent-ink)">
+      <b>Measure → Diagnose → Change → Re-measure。</b>这是 PM 的标准动作——不是「感觉这个权重该调」，是「数字告诉我哪个权重该调」。
+    </p>
+  </div>
+
+  <!-- 业务取舍：为什么看 Recall 不看 Precision -->
+  <div style="margin-top:22px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; box-shadow:var(--shadow)">
+    <h3 style="margin:0 0 10px; font-size:16px">业务取舍：为什么我盯 Recall，不盯 Precision</h3>
+    <p style="margin:0 0 14px; font-size:14px; color:var(--ink-soft)">求职是个<b>代价不对称</b>的场景——两种错误的代价完全不一样：</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px">
+      <div style="background:var(--rose-soft); border:1px solid #fecdd3; border-radius:10px; padding:14px">
+        <div style="font-size:12px; color:var(--rose); font-weight:700; letter-spacing:.5px">FP · 推错</div>
+        <div style="font-size:14px; color:var(--ink); margin-top:6px">AI 推一个我其实不想投的岗 → 我看一眼标题就划走，<b>成本 30 秒</b>。</div>
+      </div>
+      <div style="background:var(--amber-soft); border:1px solid #fde68a; border-radius:10px; padding:14px">
+        <div style="font-size:12px; color:var(--amber); font-weight:700; letter-spacing:.5px">FN · 漏掉</div>
+        <div style="font-size:14px; color:var(--ink); margin-top:6px">AI 漏掉一个我应该投的好岗 → 我可能<b>错过一份心仪 offer</b>。</div>
+      </div>
+    </div>
+    <p style="margin:14px 0 0; font-size:13.5px; color:var(--ink-soft)">
+      <b>结论：</b>求职 ToC 工具应该 <b>Recall 优先</b>。如果场景换成企业风控 / 合规审计，FP（误推一个违规）代价比 FN 大，那就反过来 Precision 优先。<b>指标重点取决于业务，不是默认看 F1。</b>
+    </p>
+  </div>
+
+  <!-- 形态选择：为什么不是 harness -->
+  <div style="margin-top:22px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; box-shadow:var(--shadow)">
+    <h3 style="margin:0 0 10px; font-size:16px">形态选择：为什么这套 eval 是单函数，不是 harness</h3>
+    <p style="margin:0 0 12px; font-size:14px; color:var(--ink-soft)">
+      我另一个项目（MusiClaw）的 eval 是完整 harness 结构——<code>cases/ + judges/ + runner.py + results/</code>，因为它评的是 <b>agent 跑工作流的行为</b>，每个 case 是一个独立任务，需要注入 fixture、跑 agent、看 trace 对不对，还要 pass@k 多次重跑。
+    </p>
+    <p style="margin:0 0 12px; font-size:14px; color:var(--ink-soft)">
+      JobPilot 这套 eval 形态完全不同——评的是 <b>AI 打的分跟我的判断一不一致</b>（scoring agreement）。所有岗位是同一类对象，AI 分已经存在 DB 里、不会变，<b>不需要 fixture、不需要重跑、不需要 pass@k</b>。一个 <code>evaluate(db, labels, threshold)</code> 函数 + 一个混淆矩阵就够了。
+    </p>
+    <p style="margin:0; font-size:13.5px; color:var(--accent-ink)">
+      <b>Tools should match the shape of the problem.</b> 把 harness 当万能模板套到不需要的场景，是 over-engineering——也是很多 PM 容易犯的错。
+    </p>
+  </div>
+
+  <!-- 边界交代 -->
+  <div class="honest">
+    <h3>这套 eval 的边界（我会主动讲）</h3>
+    <p>
+      这是一次 <b>first-pass calibration</b>——80 个样本是我对 80 个真实岗位的真实判断（我会不会投），跑出来的 0.636 F1 / 0.538 Recall 也是真实数字。但样本量还不算大，单一标注者也意味着可能有标注偏差。所以现在准确的说法是：<b>我已经有一套能跑出数字的 eval，并且清楚它的局限</b>，不是「我已经验证 AI 打分很准」。
+    </p>
+    <p style="margin-top:8px">
+      能区分「eval framework 完成」和「eval 已被充分校准」这两件事，本身就是 PM 该有的诚实——比假装数字都准强。
+    </p>
+  </div>
+
+  <div class="why" style="margin-top:18px">
+    <b>为什么这套设计值得讲：</b>很多人做 AI 产品停在「感觉还行就上线」。我把「AI 准不准」变成一个<b>可证伪、能算数的问题</b>——用我自己的真实决定当标尺。这是经济/统计训练给我的本能：<b>先想怎么度量，再谈优化</b>。能跑出 Recall 0.54 而不是 F1 0.95，反而让我相信这个 eval 真的在帮我看清模型——0.95 的数字往往意味着测试集有问题。
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <b>JobPilot</b> · Python 3.12 · Claude API · SQLite · Next.js — 全程 Claude Code 独立从 0 到 1。
+  <br>定位诚实交代：它是作品集 + 面试谈资，真实求职我直接和 Claude 配合更快。能分清「该做成工具 vs 该留给对话」，本身就是产品判断。
+</div></footer>
+
+</body>
+</html>
