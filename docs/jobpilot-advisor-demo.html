@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobPilot · 求职军师 现场 Demo</title>
+<style>
+  :root{
+    --bg:#f6f8fc; --card:#ffffff; --ink:#1e293b; --ink-soft:#475569; --ink-faint:#64748b;
+    --line:#e2e8f0; --accent:#4f46e5; --accent-soft:#eef2ff; --accent-ink:#4338ca;
+    --green:#059669; --green-soft:#ecfdf5; --amber:#b45309; --amber-soft:#fffbeb;
+    --rose:#e11d48; --rose-soft:#fff1f2; --code:#be185d;
+    --shadow:0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;line-height:1.7;font-size:15px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+  code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.84em;background:#f1f5f9;color:var(--code);padding:1px 6px;border-radius:5px}
+
+  nav{position:sticky;top:0;z-index:20;background:rgba(246,248,252,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;gap:18px;height:54px}
+  nav .brand{font-weight:700;color:var(--accent-ink)}
+  nav a{color:var(--ink-soft);text-decoration:none;font-size:13.5px;font-weight:500}
+  nav a:hover{color:var(--accent)}
+  nav .spacer{flex:1}
+
+  header.hero{padding:54px 0 30px;border-bottom:1px solid var(--line)}
+  .tag{display:inline-block;background:var(--green-soft);color:var(--green);font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:999px;margin-bottom:18px}
+  h1{font-size:32px;line-height:1.25;margin:0 0 14px;letter-spacing:-.5px}
+  .lede{font-size:16.5px;color:var(--ink-soft);max-width:760px;margin:0}
+  .lede b{color:var(--ink)}
+
+  section{padding:38px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:22px;margin:0 0 6px;letter-spacing:-.3px}
+  .sub{color:var(--ink-faint);font-size:14px;margin:0 0 22px}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+
+  /* funnel */
+  .funnel{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+  .frow{display:flex;align-items:center;gap:14px}
+  .fbar{height:38px;border-radius:9px;background:var(--accent-soft);display:flex;align-items:center;padding:0 14px;color:var(--accent-ink);font-weight:700;font-size:14px;transition:width .5s;min-width:90px}
+  .fbar.lo{background:#f1f5f9;color:var(--ink-soft)}
+  .flab{font-size:13px;color:var(--ink-faint);flex:none;width:96px;text-align:right}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-bottom:18px}
+  .toggle button{border:none;background:var(--card);padding:8px 16px;font-size:13px;cursor:pointer;color:var(--ink-soft)}
+  .toggle button.on{background:var(--accent);color:#fff;font-weight:600}
+
+  .btn{border:none;cursor:pointer;font-size:14.5px;font-weight:700;padding:11px 22px;border-radius:10px;background:var(--accent);color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.25);transition:.2s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn:disabled{opacity:.4;cursor:default;transform:none;box-shadow:none}
+  .btn.g2{background:var(--green);box-shadow:0 6px 16px rgba(5,150,105,.25)}
+
+  .diag{margin-top:8px;display:flex;flex-direction:column;gap:10px}
+  .dline{background:#fff;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:11px 14px;animation:pop .3s ease}
+  .dline .v{font-weight:700;color:var(--ink);font-size:14.5px}
+  .dline .q{font-size:12px;color:var(--ink-faint);font-family:"SF Mono",Menlo,monospace;margin-top:4px}
+  @keyframes pop{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+
+  .advice{margin-top:8px;background:var(--accent-soft);border-radius:12px;padding:16px 18px;font-size:14.5px;color:var(--ink);animation:pop .3s ease}
+  .advice .who{font-size:12px;color:var(--accent-ink);font-weight:700;margin-bottom:6px;letter-spacing:.3px}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+  @media(max-width:640px){.split{grid-template-columns:1fr}}
+  .sbox{border-radius:12px;padding:14px 16px;font-size:13.5px}
+  .sbox.code{background:#f1f5f9;border:1px solid var(--line)}
+  .sbox.model{background:var(--accent-soft);border:1px solid #dfe3ff}
+  .sbox h4{font-size:13px;margin:0 0 6px}
+  .sbox.code h4{color:var(--ink-soft)}.sbox.model h4{color:var(--accent-ink)}
+  .sbox p{margin:0;color:var(--ink-soft)}
+
+  .guard{margin-top:8px;background:var(--amber-soft);border:1px solid #fde68a;border-left:4px solid var(--amber);border-radius:0 12px 12px 0;padding:16px 18px;animation:pop .3s ease}
+  .guard h4{margin:0 0 6px;font-size:15px;color:var(--amber)}
+  .guard p{margin:0;font-size:14px;color:#78350f}
+
+  .hidden{display:none}
+  .say{background:var(--green-soft);border-left:3px solid var(--green);border-radius:0 8px 8px 0;padding:11px 15px;font-size:14px;color:#065f46;margin-top:18px}
+  .say b{color:#065f46}
+  footer{padding:28px 0 48px;color:var(--ink-faint);font-size:13px}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span class="brand">JobPilot · 求职军师</span>
+  <span class="spacer"></span>
+  <a href="#demo">现场 Demo</a>
+  <a href="#split">为什么可信</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="tag">Live Demo · 离线可跑 · 不调 API</span>
+  <h1>求职军师：投完不是结束，<br>看漏斗、给策略、陪你跑完。</h1>
+  <p class="lede">大多数找工 agent 把你送到「投出去」就停了。军师多了一层——它看你<b>整个漏斗</b>，先用纯代码算出诊断，再让模型翻成人话建议。下面点一下，看它怎么工作。
+  <b>关键设计：算账归代码、说话归模型。</b></p>
+</div></header>
+
+<!-- DEMO -->
+<section id="demo"><div class="wrap">
+  <h2>现场演示</h2>
+  <p class="sub">先选一个数据状态，再依次点「运行诊断」「生成建议」。</p>
+
+  <div class="toggle">
+    <button id="tNormal" class="on">正常数据</button>
+    <button id="tEmpty">几乎没投递（看护栏）</button>
+  </div>
+
+  <div class="panel">
+    <div style="font-size:13px;color:var(--ink-faint);margin-bottom:10px">当前求职漏斗（<span id="stateLbl">示例数据</span>）</div>
+    <div class="funnel" id="funnel"></div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:20px">
+      <button class="btn" id="diagBtn">① 运行诊断 diagnose()</button>
+      <button class="btn g2 hidden" id="adviceBtn">② 生成建议 generate_advice()</button>
+    </div>
+
+    <!-- diagnosis output -->
+    <div id="diagWrap" class="hidden" style="margin-top:18px">
+      <div style="font-size:13px;font-weight:700;color:var(--accent-ink);margin-bottom:8px">📊 诊断（纯代码算出，每条都追溯到一条查询）</div>
+      <div class="diag" id="diag"></div>
+    </div>
+
+    <!-- advice output -->
+    <div id="adviceWrap" class="hidden" style="margin-top:18px">
+      <div class="advice" id="advice"></div>
+    </div>
+
+    <!-- guardrail output -->
+    <div id="guardWrap" class="hidden" style="margin-top:8px">
+      <div class="guard">
+        <h4>军师拒绝硬编</h4>
+        <p id="guardMsg"></p>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- WHY TRUSTWORTHY -->
+<section id="split"><div class="wrap">
+  <h2>为什么这个建议扛得住「你凭什么这么说」</h2>
+  <p class="sub">LLM 给求职建议最容易翻车的地方，是它一边编数字一边下结论。军师把这两件事拆开了。</p>
+  <div class="split">
+    <div class="sbox code">
+      <h4>算账 → 归代码</h4>
+      <p><code>diagnose()</code> 纯确定性，不调 LLM。漏斗、高分岗缺口、停滞天数全用 SQL 算，<b>每个数字都能追溯回一条查询</b>、可测试、不会瞎编。</p>
+    </div>
+    <div class="sbox model">
+      <h4>说话 → 归模型</h4>
+      <p><code>generate_advice()</code> 才把这些数字喂给 Claude 翻成人话。<b>模型碰不到事实、只碰措辞</b>——它不负责造数据，只负责把诊断说清楚。</p>
+    </div>
+  </div>
+  <div class="say"><b>还有一条护栏：</b>当几乎没有投递记录时，军师<b>拒绝硬编一套漏斗分析</b>，直接说「先投起来再谈策略」——没有数据的诊断是瞎猜，宁可不给。</div>
+</div></section>
+
+<footer><div class="wrap">
+  JobPilot · 求职军师现场 Demo &nbsp;|&nbsp; 漏斗为示例数据，逻辑为真实实现（diagnose / generate_advice 分离 + 护栏）&nbsp;|&nbsp; github.com/jessieyiqichen/job-pilot
+</div></footer>
+
+<script>
+const DATA = {
+  normal: {
+    lbl:"示例数据",
+    funnel:[
+      {k:"抓取", v:349, max:349},
+      {k:"已打分", v:320, max:349},
+      {k:"高分岗 ≥8", v:22, max:349},
+      {k:"已投递", v:18, max:349, lo:false},
+      {k:"已回复", v:3, max:349, lo:true},
+      {k:"进面", v:1, max:349, lo:true},
+    ],
+    diag:[
+      {v:"高分岗（≥8）里还有 13 个没投", q:"← SELECT count(*) WHERE score>=8 AND status!='applied'"},
+      {v:"最近 6 天没有新投递", q:"← MAX(applied_at) = 6 天前"},
+      {v:"回复率 17%（18 投 / 3 回）", q:"← count(status='replied') / count(status='applied')"},
+      {v:"11 个岗位投了超过 7 天还没回音（停滞）", q:"← WHERE status='applied' AND applied_at < now-7d AND replied_at IS NULL"},
+    ],
+    advice:"两件事最该先做。① 你打分系统在用，但有 13 个高分岗（≥8）还没投——这是最高 ROI 的动作，先把这批清掉。② 回复率 17% 偏低，而且大多走 Boss；挑几个换成邮箱或内推再投一次，回复率通常能上来。另外那 11 个停滞超 7 天的，别干等——隔几天发一条新内容（新作品 / 新进展）跟进，有由头、不显催。",
+  },
+  empty: {
+    lbl:"几乎没投递",
+    funnel:[
+      {k:"抓取", v:349, max:349},
+      {k:"已打分", v:120, max:349},
+      {k:"高分岗 ≥8", v:9, max:349},
+      {k:"已投递", v:0, max:349, lo:true},
+      {k:"已回复", v:0, max:349, lo:true},
+      {k:"进面", v:0, max:349, lo:true},
+    ],
+    guard:"目前只有 0 条投递记录。我不会硬编一套漏斗转化分析——没有数据的诊断就是瞎猜。建议：先把高分岗投起来，有了 5–10 条投递，我再帮你看漏斗、给策略。",
+  }
+};
+
+let state = "normal";
+const funnelEl = document.getElementById('funnel');
+const stateLbl = document.getElementById('stateLbl');
+const diagBtn = document.getElementById('diagBtn');
+const adviceBtn = document.getElementById('adviceBtn');
+const diagWrap = document.getElementById('diagWrap');
+const adviceWrap = document.getElementById('adviceWrap');
+const guardWrap = document.getElementById('guardWrap');
+
+function renderFunnel(){
+  const d = DATA[state];
+  stateLbl.textContent = d.lbl;
+  funnelEl.innerHTML = '';
+  d.funnel.forEach(f=>{
+    const row=document.createElement('div'); row.className='frow';
+    const w = Math.max(12, Math.round(f.v / f.max * 100));
+    row.innerHTML = '<span class="flab">'+f.k+'</span>'+
+      '<div class="fbar'+(f.lo?' lo':'')+'" style="width:'+w+'%">'+f.v+'</div>';
+    funnelEl.appendChild(row);
+  });
+}
+
+function reset(){
+  diagWrap.classList.add('hidden'); adviceWrap.classList.add('hidden'); guardWrap.classList.add('hidden');
+  adviceBtn.classList.add('hidden');
+  diagBtn.disabled=false; diagBtn.textContent='① 运行诊断 diagnose()';
+  document.getElementById('diag').innerHTML='';
+}
+
+function setState(s){
+  state=s; reset(); renderFunnel();
+  document.getElementById('tNormal').classList.toggle('on', s==='normal');
+  document.getElementById('tEmpty').classList.toggle('on', s==='empty');
+}
+
+diagBtn.addEventListener('click', ()=>{
+  const d = DATA[state];
+  if(state==='empty'){
+    guardWrap.classList.remove('hidden');
+    document.getElementById('guardMsg').textContent = d.guard;
+    diagBtn.disabled=true; diagBtn.textContent='✓ 已诊断（数据不足）';
+    return;
+  }
+  diagWrap.classList.remove('hidden');
+  const box=document.getElementById('diag'); box.innerHTML='';
+  d.diag.forEach((x,i)=>{
+    setTimeout(()=>{
+      const el=document.createElement('div'); el.className='dline';
+      el.innerHTML='<div class="v">'+x.v+'</div><div class="q">'+x.q+'</div>';
+      box.appendChild(el);
+    }, i*260);
+  });
+  diagBtn.disabled=true; diagBtn.textContent='✓ 诊断完成';
+  setTimeout(()=>adviceBtn.classList.remove('hidden'), d.diag.length*260+150);
+});
+
+adviceBtn.addEventListener('click', ()=>{
+  adviceWrap.classList.remove('hidden');
+  document.getElementById('advice').innerHTML='<div class="who">军师建议（Claude 把上面的数字翻成人话）</div>'+DATA[state].advice;
+  adviceBtn.disabled=true; adviceBtn.textContent='✓ 建议已生成';
+  adviceWrap.scrollIntoView({behavior:'smooth',block:'nearest'});
+});
+
+document.getElementById('tNormal').addEventListener('click',()=>setState('normal'));
+document.getElementById('tEmpty').addEventListener('click',()=>setState('empty'));
+renderFunnel();
+</script>
+</body>
+</html>
