@@ -213,6 +213,75 @@ class TestDistillNotesViaAI:
         assert results[0].source == "xhs"
         assert results[0].author == "上岸学姐"
 
+    @staticmethod
+    def _content_blocks_from_call(mock_cls) -> list:
+        kwargs = mock_cls.return_value.messages.create.call_args.kwargs
+        return kwargs["messages"][0]["content"]
+
+    @patch("jobpilot.research.config")
+    def test_passes_images_as_image_blocks(self, mock_config):
+        """笔记里有 images → 多模态调用，附 image block。"""
+        mock_config.ANTHROPIC_API_KEY = "sk-test"
+        mock_config.ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_cls.return_value.messages.create.return_value = _fake_web_response("[]")
+            _distill_notes_via_ai(
+                [{
+                    "title": "面经",
+                    "content": "图里",
+                    "images": ["https://cdn.xhs.com/a.jpg", "https://cdn.xhs.com/b.jpg"],
+                }],
+                "AI产品",
+            )
+            blocks = self._content_blocks_from_call(mock_cls)
+        image_blocks = [b for b in blocks if b.get("type") == "image"]
+        assert len(image_blocks) == 2
+        assert image_blocks[0]["source"]["url"] == "https://cdn.xhs.com/a.jpg"
+
+    @patch("jobpilot.research.config")
+    def test_caps_images_per_note(self, mock_config):
+        """每条笔记最多取 MAX_IMAGES_PER_NOTE=3 张。"""
+        mock_config.ANTHROPIC_API_KEY = "sk-test"
+        mock_config.ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_cls.return_value.messages.create.return_value = _fake_web_response("[]")
+            _distill_notes_via_ai(
+                [{
+                    "title": "面经",
+                    "content": "x",
+                    "images": [f"https://x.com/{i}.jpg" for i in range(10)],
+                }],
+                "q",
+            )
+            blocks = self._content_blocks_from_call(mock_cls)
+        assert len([b for b in blocks if b.get("type") == "image"]) == 3
+
+    @patch("jobpilot.research.config")
+    def test_caps_total_images(self, mock_config):
+        """跨笔记的全局图片预算 MAX_IMAGES_PER_REQUEST=12 不会被突破。"""
+        mock_config.ANTHROPIC_API_KEY = "sk-test"
+        mock_config.ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"
+        notes = [
+            {"title": f"n{i}", "content": "x", "images": [f"https://x.com/{i}-{j}.jpg" for j in range(3)]}
+            for i in range(6)  # 6 notes * 3 imgs = 18 > 12
+        ]
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_cls.return_value.messages.create.return_value = _fake_web_response("[]")
+            _distill_notes_via_ai(notes, "q")
+            blocks = self._content_blocks_from_call(mock_cls)
+        assert len([b for b in blocks if b.get("type") == "image"]) == 12
+
+    @patch("jobpilot.research.config")
+    def test_no_images_means_no_image_blocks(self, mock_config):
+        """老路径（无 images）必须依然工作、不附带任何 image block。"""
+        mock_config.ANTHROPIC_API_KEY = "sk-test"
+        mock_config.ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_cls.return_value.messages.create.return_value = _fake_web_response("[]")
+            _distill_notes_via_ai([{"title": "t", "content": "c"}], "q")
+            blocks = self._content_blocks_from_call(mock_cls)
+        assert [b for b in blocks if b.get("type") == "image"] == []
+
 
 # ---------------------------------------------------------------------------
 # research() dispatch

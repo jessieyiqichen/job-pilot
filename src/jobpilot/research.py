@@ -59,40 +59,50 @@ def _to_result(item: dict, source: str) -> ResearchResult | None:
 # 小红书检索
 # ---------------------------------------------------------------------------
 
-XHS_DISTILL_PROMPT = """\
+# 图片是面经的主要载体（小红书很多帖正文只写"详见图"）。喂给 vision 才能读到真题，
+# 但每张图烧 token，必须设硬上限。
+MAX_IMAGES_PER_NOTE = 3
+MAX_IMAGES_PER_REQUEST = 12
+
+XHS_DISTILL_HEADER = """\
 你是求职资料整理助手。下面是从小红书搜到的笔记，用户在准备面试 / 做功课。
 
 ## 用户在查
 {query}
 
-## 笔记列表
-{notes_text}
+## 笔记列表（部分笔记附带图片，内容常常在图里）
+"""
+
+XHS_DISTILL_TASK = """\
 
 ## 任务
-1. 只挑出和「{query}」真正相关、对求职或面试准备有帮助的笔记（面经、真题、考点、经验、避坑）。
+1. 只挑出和这条查询真正相关、对求职 / 面试准备有帮助的笔记（面经、真题、考点、经验、避坑）。
 2. 跳过广告、无关生活帖、纯引流帖。
-3. 对每条提炼：标题、要点摘要（**尤其把里面具体的面试题、考点、经验列出来**，别只说"分享了面经"）。
-4. 不要编造笔记里没有的内容；笔记信息少就如实简短。
+3. 对每条提炼：标题、要点摘要（**尤其把图里和文字里具体的面试题、考点、经验列出来**，别只说"分享了面经"）。
+4. 文字和图片都要看；图里有题目就把题目转录到 summary 里。
+5. 不要编造笔记里没有的内容；笔记信息少就如实简短。
 
 ## 输出（严格 JSON 数组，不要其他文字）
 [
-  {{
+  {
     "title": "笔记标题",
-    "summary": "要点摘要，重点是具体题目/考点/经验",
+    "summary": "要点摘要，重点是具体题目/考点/经验（包含从图里读出的）",
     "url": "笔记链接",
     "author": "作者"
-  }}
+  }
 ]
 """
 
 
-def _distill_notes_via_ai(notes: list[dict], query: str) -> list[ResearchResult]:
-    """用 Anthropic API 把笔记提炼成对面试准备有用的资料。无 key / 出错 → []。"""
-    if not config.ANTHROPIC_API_KEY:
-        logger.warning("No ANTHROPIC_API_KEY, cannot distill XHS notes")
-        return []
+def _build_distill_content(notes: list[dict], query: str) -> list[dict]:
+    """Build multimodal content blocks for one distill request.
 
-    notes_parts: list[str] = []
+    Interleaves text blocks (one per note) with image blocks (each note's images,
+    capped per-note and per-request) so the model knows which image belongs where.
+    """
+    blocks: list[dict] = [{"type": "text", "text": XHS_DISTILL_HEADER.format(query=query)}]
+    images_used = 0
+
     for i, note in enumerate(notes, 1):
         parts = [f"### 笔记 {i}"]
         if note.get("title"):
@@ -103,9 +113,30 @@ def _distill_notes_via_ai(notes: list[dict], query: str) -> list[ResearchResult]
             parts.append(f"内容:\n{note['content']}")
         if note.get("url"):
             parts.append(f"链接: {note['url']}")
-        notes_parts.append("\n".join(parts))
+        blocks.append({"type": "text", "text": "\n".join(parts)})
 
-    prompt = XHS_DISTILL_PROMPT.format(query=query, notes_text="\n\n".join(notes_parts))
+        note_images = (note.get("images") or [])[:MAX_IMAGES_PER_NOTE]
+        for img_url in note_images:
+            if images_used >= MAX_IMAGES_PER_REQUEST:
+                logger.info(
+                    "Image budget %d hit; dropping remaining images",
+                    MAX_IMAGES_PER_REQUEST,
+                )
+                break
+            blocks.append({"type": "image", "source": {"type": "url", "url": img_url}})
+            images_used += 1
+
+    blocks.append({"type": "text", "text": XHS_DISTILL_TASK})
+    return blocks
+
+
+def _distill_notes_via_ai(notes: list[dict], query: str) -> list[ResearchResult]:
+    """Distill XHS notes (text + images) via Claude vision. No key / error → []."""
+    if not config.ANTHROPIC_API_KEY:
+        logger.warning("No ANTHROPIC_API_KEY, cannot distill XHS notes")
+        return []
+
+    content_blocks = _build_distill_content(notes, query)
 
     try:
         import anthropic
@@ -114,7 +145,7 @@ def _distill_notes_via_ai(notes: list[dict], query: str) -> list[ResearchResult]
         response = client.messages.create(
             model=config.ANTHROPIC_MODEL,
             max_tokens=8192,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": content_blocks}],
         )
     except Exception:
         logger.exception("Anthropic API call failed for XHS distill")

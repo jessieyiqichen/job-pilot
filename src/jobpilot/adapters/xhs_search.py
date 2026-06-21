@@ -138,17 +138,18 @@ def call_mcp_search(keywords: str, limit: int = 10, timeout: int = 120) -> str:
 def _parse_notes_text(raw: str) -> list[dict]:
     """Parse rednote-mcp search_notes output into note dicts.
 
-    The output format is:
+    The output format (after the image-URLs patch):
         标题: ...
         作者: ...
         内容: ...
         点赞: N
         评论: N
+        图片: url1 | url2 | ...           (only present on patched MCP)
         链接: https://...
         ---
     """
     notes: list[dict] = []
-    current: dict[str, str] = {}
+    current: dict = {}
 
     for line in raw.splitlines():
         line = line.rstrip()
@@ -176,6 +177,12 @@ def _parse_notes_text(raw: str) -> list[dict]:
             current["likes"] = line[4:].strip()
         elif line.startswith("评论: "):
             current["comments"] = line[4:].strip()
+        elif line.startswith("图片:"):
+            # Tolerate "图片:" (empty) and "图片: url1 | url2"
+            payload = line[3:].strip()
+            current["images"] = (
+                [u.strip() for u in payload.split("|") if u.strip()] if payload else []
+            )
         elif "content" in current:
             # Continuation of content
             current["content"] += "\n" + line

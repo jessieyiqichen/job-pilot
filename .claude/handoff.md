@@ -478,6 +478,22 @@ CLI session 完成任务后请在对应条目标 ✅，并在「CLI 完成报告
 
 **账号说明**：cookies 文件 `~/.mcp/rednote/cookies.json` 最后修改 2026-03-27，user ID `6410425e`。无法通过 MCP 程序化确认账号名（无 get_profile 工具），用户需自行确认是否为招工专用账号。
 
+## ✅ research 接 Claude vision 读 XHS 图片（2026-06-21）
+
+**需求**：用户反馈"小红书面经大部分内容在图里，文字 caption 是'详见图'"——纯文本提炼漏掉真题。
+
+**改动**：
+- **rednote-mcp dist/ 重新 patch**（不入仓，npm update 后需重 patch）：
+  - `tools/rednoteTools.js` extractContent 加 `images` 字段，从 `#noteContainer` 内所有 `img` 抓 src，过滤 avatar/icon、去重。
+  - `cli.js` search_notes 格式化器加 `图片: url1 | url2` 行（仅 images 非空时输出）。
+  - 两个文件均通过 `node -c` 语法检查。
+- `src/jobpilot/adapters/xhs_search.py`：`_parse_notes_text` 解析 `图片:` 行 → `note["images"] = [...]`；无 `图片` 行不污染 dict。
+- `src/jobpilot/research.py`：`_distill_notes_via_ai` 改成多模态调用。新增 `_build_distill_content` 把 notes 转成 content blocks（text + image 交错），常量 `MAX_IMAGES_PER_NOTE=3` / `MAX_IMAGES_PER_REQUEST=12` 控成本；超额 log 后丢弃。prompt 拆成 HEADER / TASK 两段、加"图里的题目也要转录"指令。
+- 测试：parser 4 个 + distill 4 个（含图块数量、per-note cap、global cap、无图回退）。495→503 全过。
+- **真机验证通过**：跑 `research "AI产品实习面试题" --channel xhs --limit 3`，Claude vision 从 `sns-webpic-qc.xhscdn.com` 直接拉图、OCR、转录进 summary（笔记 #2 文字仅 "不包对"，summary 出现了图里的"Redis/ID 判断/日志 IP 统计"等题）。Anthropic 后端访问 XHS CDN 没被 referer/cookie 拦。
+
+**成本**：每条 distill 调用从纯文 ~$0.02 升到含 vision ~$0.05-0.15（与图数成正比）。可接受。
+
 ## ✅ 军师资料检索 research（2026-05-28）
 
 **需求**：用户拍板要"军师能按需去小红书 / web 搜面试题、面经、相关帖子"（覆盖了 me.md 里"暂不堆功能"——这是用户显式决定）。

@@ -114,6 +114,40 @@ class TestParseNotesText:
         assert len(notes) == 1
         assert notes[0]["title"] == "Test"
 
+    def test_parses_image_urls(self):
+        """rednote-mcp patched output: 图片: url1 | url2 | url3."""
+        raw = (
+            "标题: 面经\n作者: A\n内容: 详见图\n点赞: 1\n评论: 0\n"
+            "图片: https://cdn.xhs.com/1.jpg | https://cdn.xhs.com/2.jpg\n"
+            "链接: https://www.xiaohongshu.com/explore/x\n---"
+        )
+        notes = _parse_notes_text(raw)
+        assert notes[0]["images"] == [
+            "https://cdn.xhs.com/1.jpg",
+            "https://cdn.xhs.com/2.jpg",
+        ]
+
+    def test_image_line_absent_means_no_images_key(self):
+        """Old MCP without 图片 patch: no images key polluting dict."""
+        raw = "标题: T\n作者: A\n内容: c\n链接: https://x.com/1\n---"
+        notes = _parse_notes_text(raw)
+        assert "images" not in notes[0]
+
+    def test_image_line_empty_yields_empty_list(self):
+        raw = "标题: T\n作者: A\n内容: c\n图片: \n链接: https://x.com/1\n---"
+        notes = _parse_notes_text(raw)
+        assert notes[0]["images"] == []
+
+    def test_image_line_not_swallowed_into_content(self):
+        """图片 line must be parsed, not appended as content continuation."""
+        raw = (
+            "标题: T\n作者: A\n内容: only-this\n"
+            "图片: https://x.com/a.jpg\n链接: https://x.com/1\n---"
+        )
+        notes = _parse_notes_text(raw)
+        assert notes[0]["content"] == "only-this"
+        assert notes[0]["images"] == ["https://x.com/a.jpg"]
+
     def test_joined_separator(self):
         """Handle '---标题: ...' where separator and title are joined (real MCP output)."""
         raw = (

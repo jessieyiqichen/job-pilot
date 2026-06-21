@@ -118,7 +118,7 @@ jobpilot apply                         # 5. mark applied (human-in-the-loop)
 | `chat [--job <id>] [--new]` | Real-time multi-turn advisor with cross-session memory + proactive follow-up |
 | `plan [--target N]` | This week's apply list (deterministic) + follow-up reminders |
 | `followup [--done <id>] [--drop <id>]` | Track commitments voiced in chat; auto-closes once a job is applied |
-| `research "<query>" [--channel xhs\|web\|both]` | On-demand material lookup — pulls interview questions / 面经 / relevant posts from Xiaohongshu + web (read-only, not written to the job DB) |
+| `research "<query>" [--channel xhs\|web\|both]` | On-demand material lookup — pulls interview questions / 面经 / relevant posts from Xiaohongshu + web (read-only, not written to the job DB). Xiaohongshu notes are read with Claude vision so questions hidden inside image-only posts get transcribed too. |
 | `voice "<text>" [--revised] [--list]` | Store samples of your real writing so greetings sound like you |
 | `import-xhs <json> [--score]` | Import Xiaohongshu favorites |
 | `apply` | Interactive batch apply |
