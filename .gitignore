@@ -22,6 +22,7 @@ data/xhs_favorites_raw.json
 data/eval_labels.json
 data/boss_manual_jobs.json
 data/*.md
+data/*.pdf
 data/boss_spike_debug.*
 .DS_Store
 
