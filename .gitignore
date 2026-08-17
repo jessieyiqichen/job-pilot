@@ -64,3 +64,4 @@ web/demo-data/*.db-shm
 
 # Personal local-only state snapshot (not committed)
 .claude/me.md
+data/qiuzhao/
