@@ -11,7 +11,8 @@ export default function JobGrid({ jobs }: { jobs: JobWithScore[] }) {
     city: '',
     platform: '',
     jobType: 'intern',
-    timeRange: '30d',
+    // demo 数据是冻结快照，按时间过滤的默认值会把整个看板滤空
+    timeRange: 'all',
     minScore: 0,
     sort: 'score',
   });
