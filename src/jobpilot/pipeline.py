@@ -116,6 +116,7 @@ def _search_stage(db: JobPilotDB, cfg: PipelineConfig) -> tuple[StageResult, int
     """
     from jobpilot.adapters.base import SearchFilters
     from jobpilot.adapters.github_jobs import GitHubAdapter
+    from jobpilot.adapters.linkedin_jobspy import LinkedInJobSpyAdapter
     from jobpilot.adapters.websearch import WebSearchAdapter
     from jobpilot.adapters.xhs_search import XHSSearchAdapter
 
@@ -123,6 +124,7 @@ def _search_stage(db: JobPilotDB, cfg: PipelineConfig) -> tuple[StageResult, int
         "websearch": WebSearchAdapter,
         "xhs": XHSSearchAdapter,
         "github": GitHubAdapter,
+        "linkedin": LinkedInJobSpyAdapter,
     }
     filters = SearchFilters(city=cfg.city)
     total = 0

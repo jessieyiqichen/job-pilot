@@ -114,6 +114,7 @@ def search(
     from jobpilot.adapters.base import SearchFilters
     from jobpilot.adapters.boss import BossAdapter
     from jobpilot.adapters.github_jobs import GitHubAdapter
+    from jobpilot.adapters.linkedin_jobspy import LinkedInJobSpyAdapter
     from jobpilot.adapters.websearch import WebSearchAdapter
     from jobpilot.adapters.xhs_search import XHSSearchAdapter
 
@@ -122,6 +123,7 @@ def search(
         "websearch": WebSearchAdapter,
         "xhs": XHSSearchAdapter,
         "github": GitHubAdapter,
+        "linkedin": LinkedInJobSpyAdapter,
     }
     adapter_cls = adapters.get(platform)
     if not adapter_cls:

@@ -62,6 +62,15 @@ WEBSEARCH_FALLBACK_THRESHOLD = int(os.environ.get("JOBPILOT_WEBSEARCH_THRESHOLD"
 # Path to boss-cli executable (if not on PATH)
 BOSS_CLI_PATH: str = os.environ.get("BOSS_CLI_PATH", "boss")
 
+# JobSpy (linkedin adapter) — 免登录公开端点抓取
+JOBSPY_SITES: tuple[str, ...] = tuple(
+    s.strip() for s in os.environ.get("JOBPILOT_JOBSPY_SITES", "linkedin").split(",") if s.strip()
+)
+JOBSPY_RESULTS_WANTED: int = int(os.environ.get("JOBPILOT_JOBSPY_RESULTS", "25"))
+JOBSPY_HOURS_OLD: int = int(os.environ.get("JOBPILOT_JOBSPY_HOURS", "336"))  # 默认近14天
+JOBSPY_COUNTRY: str = os.environ.get("JOBPILOT_JOBSPY_COUNTRY", "USA")
+JOBSPY_REMOTE_DEFAULT: bool = os.environ.get("JOBPILOT_JOBSPY_REMOTE", "1") == "1"
+
 # ============================================================
 # rednote-mcp (小红书 MCP server)
 # ============================================================
